@@ -52,14 +52,13 @@ Clang 21.0.0, Ninja 1.13.2.
 | `https://expired.badssl.com/` Alloy style | Client data-URL error page via `OnLoadError` |
 | `open build/debug/apps/desktop/Debug/Vrowser.app --args --url=https://example.com` | Launched |
 | CEF Linux workflow (`cef-linux.yml` on `ubuntu-latest`) | Built `vrowser` and `chrome-sandbox`; sandbox left ON |
+| CEF Windows workflow (`cef-windows.yml` on `windows-latest`) | Built `vrowser.exe` (bootstrap) and `vrowser.dll`; sandbox left ON |
 
 The passing smoke command was `tools/smoke_test.sh` after the macOS keychain
 permission was available. It did not pass `--use-mock-keychain`.
 
-Linux CEF CI (`.github/workflows/cef-linux.yml`) is on `main`. Windows CEF CI
-is `.github/workflows/cef-windows.yml` (issue #10 / PR #41); confirm the
-workflow run before treating the Windows shell as verified. Graphical smoke
-was not run on either host.
+Linux and Windows CEF CI workflows are on `main` (or landing with #10).
+Graphical smoke was not run on either host.
 
 ## Known limitations
 
@@ -88,13 +87,13 @@ Vim shell. Details in
 
 ## Next unblocked work
 
-Finish Windows CEF CI (#10). The macOS bundle layout check (#11), the Vim
-mode machine (#14), and the command registry (#20) are also unblocked.
-Navigation in the open window (#12) still needs the `agent-ready` label.
-Permission handling should follow Alloy's client-owned prompt path.
+The macOS bundle layout check (#11), the Vim mode machine (#14), and the
+command registry (#20) are unblocked. Navigation in the open window (#12)
+still needs the `agent-ready` label. Permission handling should follow
+Alloy's client-owned prompt path.
 
 ## Recommended next task
 
-After #10 merges: [Check the macOS app bundle layout](https://github.com/iamcaye/vrowser/issues/11)
+[Check the macOS app bundle layout](https://github.com/iamcaye/vrowser/issues/11)
 on a local macOS build, or [Add the Vim mode state machine](https://github.com/iamcaye/vrowser/issues/14)
 for pure unit-test work.
