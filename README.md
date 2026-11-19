@@ -49,6 +49,11 @@ build/debug/apps/desktop/Debug/Vrowser.app/Contents/MacOS/Vrowser \
 `tools/smoke_test.sh` loads `https://example.com`, expects HTTP 200, and
 waits for the process to exit.
 
+`tools/check_mac_bundle.sh` verifies the macOS app contains the main
+executable, the five helper bundles, and
+`Chromium Embedded Framework.framework`. After a debug build you can also run
+`cmake --build --preset debug --target check_mac_bundle`.
+
 Switches:
 
 | Switch | Effect |

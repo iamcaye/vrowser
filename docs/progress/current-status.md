@@ -53,12 +53,14 @@ Clang 21.0.0, Ninja 1.13.2.
 | `open build/debug/apps/desktop/Debug/Vrowser.app --args --url=https://example.com` | Launched |
 | CEF Linux workflow (`cef-linux.yml` on `ubuntu-latest`) | Built `vrowser` and `chrome-sandbox`; sandbox left ON |
 | CEF Windows workflow (`cef-windows.yml` on `windows-latest`) | Built `vrowser.exe` (bootstrap) and `vrowser.dll`; sandbox left ON |
+| `tools/check_mac_bundle.sh` against debug `Vrowser.app` | passed |
+| `tools/check_mac_bundle.sh` against missing-helper fixture | failed as expected |
 
 The passing smoke command was `tools/smoke_test.sh` after the macOS keychain
 permission was available. It did not pass `--use-mock-keychain`.
 
-Linux and Windows CEF CI workflows are on `main` (or landing with #10).
-Graphical smoke was not run on either host.
+Linux and Windows CEF CI workflows are on `main`. Graphical smoke was not run
+on either host.
 
 ## Known limitations
 
@@ -87,13 +89,11 @@ Vim shell. Details in
 
 ## Next unblocked work
 
-The macOS bundle layout check (#11), the Vim mode machine (#14), and the
-command registry (#20) are unblocked. Navigation in the open window (#12)
-still needs the `agent-ready` label. Permission handling should follow
-Alloy's client-owned prompt path.
+The Vim mode machine (#14) and the command registry (#20) are unblocked.
+Navigation in the open window (#12) still needs the `agent-ready` label.
+Permission handling should follow Alloy's client-owned prompt path.
 
 ## Recommended next task
 
-[Check the macOS app bundle layout](https://github.com/iamcaye/vrowser/issues/11)
-on a local macOS build, or [Add the Vim mode state machine](https://github.com/iamcaye/vrowser/issues/14)
-for pure unit-test work.
+[Add the Vim mode state machine](https://github.com/iamcaye/vrowser/issues/14)
+(`agent-ready`, `priority:p1`) or [Add the command registry and parser](https://github.com/iamcaye/vrowser/issues/20).
