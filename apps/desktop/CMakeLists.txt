@@ -132,3 +132,13 @@ if(TARGET ${CEF_TARGET})
     "${CMAKE_SOURCE_DIR}/src")
   target_compile_features(${CEF_TARGET} PRIVATE cxx_std_20)
 endif()
+
+if(OS_MAC AND TARGET ${CEF_TARGET})
+  add_custom_target(check_mac_bundle
+    COMMAND "${CMAKE_SOURCE_DIR}/tools/check_mac_bundle.sh" "${CEF_APP}"
+    DEPENDS ${CEF_TARGET}
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    COMMENT "Checking macOS app bundle layout"
+    VERBATIM)
+endif()
+

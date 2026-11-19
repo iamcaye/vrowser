@@ -120,6 +120,15 @@ Smoke check (opens a window, loads the URL, then quits):
 tools/smoke_test.sh
 ```
 
+macOS bundle layout (main executable, five helpers, CEF framework):
+
+```bash
+tools/check_mac_bundle.sh
+# or, after a debug build:
+cmake --build --preset debug --target check_mac_bundle
+```
+
+
 Switches:
 
 - `--url=<url>` initial page. Default `https://example.com`.
