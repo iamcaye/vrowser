@@ -1,0 +1,13 @@
+build/
+out/
+cmake-build-*/
+third_party/cef/
+.DS_Store
+.cache/
+compile_commands.json
+CMakeUserPresets.json
+*.user
+vrowser-user-data/
+*.log
+.idea/
+.vscode/

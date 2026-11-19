@@ -1,0 +1,21 @@
+---
+Language: Cpp
+BasedOnStyle: Chromium
+Standard: c++20
+ColumnLimit: 80
+IndentWidth: 2
+AccessModifierOffset: -1
+SortIncludes: false
+ReflowComments: true
+AllowShortFunctionsOnASingleLine: Inline
+AlwaysBreakTemplateDeclarations: Yes
+PointerAlignment: Left
+DerivePointerAlignment: false
+InsertBraces: true
+InsertNewlineAtEOF: true
+---
+Language: ObjC
+BasedOnStyle: Chromium
+ColumnLimit: 80
+IndentWidth: 2
+InsertNewlineAtEOF: true
