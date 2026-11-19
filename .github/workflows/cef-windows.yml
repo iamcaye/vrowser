@@ -1,0 +1,51 @@
+name: CEF Windows
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build vrowser (windows64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ninja
+        run: choco install ninja -y
+
+      - name: Enter the MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Show pinned CEF windows64 hash
+        shell: bash
+        run: |
+          grep -E 'VROWSER_CEF_VERSION|VROWSER_CEF_SHA256_windows64' \
+            cmake/cef_version.cmake
+
+      - name: Cache CEF binary distribution
+        uses: actions/cache@v4
+        with:
+          path: third_party/cef
+          key: cef-windows64-${{ hashFiles('cmake/cef_version.cmake') }}
+
+      - name: Configure debug preset
+        # DownloadCEF.cmake verifies VROWSER_CEF_SHA256_windows64 from
+        # cmake/cef_version.cmake. USE_SANDBOX stays at CEF's default (ON).
+        run: cmake --preset debug
+
+      - name: Confirm sandbox stays enabled
+        shell: bash
+        run: grep -E '^USE_SANDBOX:BOOL=ON$' build/debug/CMakeCache.txt
+
+      - name: Build vrowser
+        run: cmake --build --preset debug --target vrowser
+
+      - name: Check the Windows sandbox bootstrap layout
+        shell: bash
+        run: |
+          out=build/debug/apps/desktop/Debug
+          test -f "$out/vrowser.exe"
+          test -f "$out/vrowser.dll"
+          file "$out/vrowser.exe" "$out/vrowser.dll"
