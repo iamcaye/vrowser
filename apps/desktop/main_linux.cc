@@ -12,13 +12,13 @@
 #if defined(CEF_X11)
 namespace {
 
-int XErrorHandler(Display* display, XErrorEvent* event) {
+int XErrorHandlerImpl(Display* display, XErrorEvent* event) {
   (void)display;
   (void)event;
   return 0;
 }
 
-int XioErrorHandler(Display* display) {
+int XIOErrorHandlerImpl(Display* display) {
   (void)display;
   return 0;
 }
@@ -34,8 +34,8 @@ NO_STACK_PROTECTOR int main(int argc, char* argv[]) {
   }
 
 #if defined(CEF_X11)
-  XSetErrorHandler(XErrorHandler);
-  XSetIOErrorHandler(XioErrorHandler);
+  XSetErrorHandler(XErrorHandlerImpl);
+  XSetIOErrorHandler(XIOErrorHandlerImpl);
 #endif
 
   const vrowser::StartupConfig config = vrowser::ParseStartupConfig(argc, argv);
