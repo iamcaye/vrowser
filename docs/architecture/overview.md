@@ -46,9 +46,8 @@ Views on macOS.
 Chrome style is the default runtime style. `--use-alloy-style` selects Alloy
 style. The two styles are not interchangeable. Chrome style supplies Chromium's
 own toolbar and dialogs. Alloy style gives the client more of the window and
-is the likely long-term shell for a Vim-style UI. The choice is documented in
-`docs/architecture/process-model.md` and is still an open research issue before
-custom UI is built on top of either style.
+is the planned Vim-shell target. The macOS comparison and recommendation are
+in [runtime-style.md](runtime-style.md).
 
 ## Process and data
 
