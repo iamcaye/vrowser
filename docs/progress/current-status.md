@@ -55,8 +55,10 @@ Clang 21.0.0, Ninja 1.13.2.
 The passing smoke command was `tools/smoke_test.sh` after the macOS keychain
 permission was available. It did not pass `--use-mock-keychain`.
 
-Linux and Windows were not configured or run. Their entry points are in
-`apps/desktop` and follow the current cefsimple structure.
+Windows was not configured or run. Its entry points are in `apps/desktop`
+and follow the current cefsimple structure. Linux CEF CI is
+`.github/workflows/cef-linux.yml` (issue #9); confirm the workflow run on
+the pull request before treating the Linux shell as verified.
 
 ## Known limitations
 
@@ -85,15 +87,15 @@ Vim shell. Details in
 
 ## Next unblocked work
 
-Linux (#9) and Windows (#10) CEF builds can proceed in parallel. The macOS
-bundle layout check (#11), the Vim mode machine (#14), and the command
-registry (#20) are also unblocked. Permission handling should wait until the
-runtime-style note is accepted, then follow Alloy's client-owned prompt path.
+Windows CEF CI (#10) can proceed in parallel with finishing Linux (#9). The
+macOS bundle layout check (#11), the Vim mode machine (#14), and the command
+registry (#20) are also unblocked. Navigation in the open window (#12) is
+unblocked after the runtime-style decision but still needs the `agent-ready`
+label. Permission handling should follow Alloy's client-owned prompt path.
 
 ## Recommended next task
 
-[Build and smoke-test the desktop shell on Linux](https://github.com/iamcaye/vrowser/issues/9)
-or [Windows](https://github.com/iamcaye/vrowser/issues/10), whichever host is
-available. Both are `agent-ready` and `priority:p1`. On macOS-only machines,
+After #9 merges: [Build and smoke-test the desktop shell on Windows](https://github.com/iamcaye/vrowser/issues/10)
+(`agent-ready`, `priority:p1`). On macOS-only machines,
 [Check the macOS app bundle layout](https://github.com/iamcaye/vrowser/issues/11)
 is the smallest local follow-up.
