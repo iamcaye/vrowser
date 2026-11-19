@@ -51,12 +51,16 @@ Clang 21.0.0, Ninja 1.13.2.
 | `https://expired.badssl.com/` Chrome style | Chromium keeps the error UI; no client data URL |
 | `https://expired.badssl.com/` Alloy style | Client data-URL error page via `OnLoadError` |
 | `open build/debug/apps/desktop/Debug/Vrowser.app --args --url=https://example.com` | Launched |
+| CEF Linux workflow (`cef-linux.yml` on `ubuntu-latest`) | Built `vrowser` and `chrome-sandbox`; sandbox left ON |
 
 The passing smoke command was `tools/smoke_test.sh` after the macOS keychain
 permission was available. It did not pass `--use-mock-keychain`.
 
-Linux and Windows were not configured or run. Their entry points are in
-`apps/desktop` and follow the current cefsimple structure.
+Windows was not configured or run. Its entry points are in `apps/desktop`
+and follow the current cefsimple structure. Linux CEF CI
+(`.github/workflows/cef-linux.yml`) builds `vrowser` on `ubuntu-latest` with
+the pinned `linux64` archive and `USE_SANDBOX=ON`. Graphical Linux smoke was
+not run.
 
 ## Known limitations
 
@@ -85,15 +89,15 @@ Vim shell. Details in
 
 ## Next unblocked work
 
-Linux (#9) and Windows (#10) CEF builds can proceed in parallel. The macOS
-bundle layout check (#11), the Vim mode machine (#14), and the command
-registry (#20) are also unblocked. Permission handling should wait until the
-runtime-style note is accepted, then follow Alloy's client-owned prompt path.
+Windows CEF CI (#10), the macOS bundle layout check (#11), the Vim mode
+machine (#14), and the command registry (#20) are unblocked. Navigation in
+the open window (#12) is unblocked after the runtime-style decision but still
+needs the `agent-ready` label. Permission handling should follow Alloy's
+client-owned prompt path.
 
 ## Recommended next task
 
-[Build and smoke-test the desktop shell on Linux](https://github.com/iamcaye/vrowser/issues/9)
-or [Windows](https://github.com/iamcaye/vrowser/issues/10), whichever host is
-available. Both are `agent-ready` and `priority:p1`. On macOS-only machines,
+[Build and smoke-test the desktop shell on Windows](https://github.com/iamcaye/vrowser/issues/10)
+(`agent-ready`, `priority:p1`). On macOS-only machines,
 [Check the macOS app bundle layout](https://github.com/iamcaye/vrowser/issues/11)
 is the smallest local follow-up.

@@ -1,0 +1,51 @@
+name: CEF Linux
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build vrowser (linux64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libx11-dev
+
+      - name: Show pinned CEF linux64 hash
+        run: |
+          grep -E 'VROWSER_CEF_VERSION|VROWSER_CEF_SHA256_linux64' \
+            cmake/cef_version.cmake
+
+      - name: Cache CEF binary distribution
+        uses: actions/cache@v4
+        with:
+          path: third_party/cef
+          key: cef-linux64-${{ hashFiles('cmake/cef_version.cmake') }}
+
+      - name: Configure debug preset
+        # DownloadCEF.cmake verifies VROWSER_CEF_SHA256_linux64 from
+        # cmake/cef_version.cmake. USE_SANDBOX stays at CEF's default (ON).
+        run: cmake --preset debug
+
+      - name: Confirm sandbox stays enabled
+        run: grep -E '^USE_SANDBOX:BOOL=ON$' build/debug/CMakeCache.txt
+
+      - name: Build vrowser
+        run: cmake --build --preset debug --target vrowser
+
+      - name: Check the Linux binary
+        run: |
+          test -x build/debug/apps/desktop/Debug/vrowser
+          test -f build/debug/apps/desktop/Debug/chrome-sandbox
+          file build/debug/apps/desktop/Debug/vrowser

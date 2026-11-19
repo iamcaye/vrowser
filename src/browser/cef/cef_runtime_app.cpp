@@ -15,6 +15,9 @@
 #include "include/wrapper/cef_helpers.h"
 
 namespace vrowser {
+
+CefRuntimeApp::~CefRuntimeApp() = default;
+
 namespace {
 
 std::string PathToUtf8(const std::filesystem::path& path) {

@@ -17,6 +17,7 @@ bool ConfigureCefSettings(CefSettings& settings, const StartupConfig& config);
 class CefRuntimeApp : public CefApp, public CefBrowserProcessHandler {
  public:
   explicit CefRuntimeApp(StartupConfig config);
+  ~CefRuntimeApp() override;
 
   CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override {
     return this;
