@@ -28,6 +28,11 @@ started.
   `--use-alloy-style`, `--use-native`, profile directory, macOS helper
   bundles, clean shutdown through `CefQuitMessageLoop`.
 - `tools/smoke_test.sh` loads a URL and exits.
+- Runtime-style comparison on macOS:
+  [docs/architecture/runtime-style.md](../architecture/runtime-style.md).
+  Chrome style stays the prototype default. Alloy style is the planned Vim
+  shell target once permission, certificate, download, and find UI are owned
+  by Vrowser.
 
 ## Verification
 
@@ -41,6 +46,10 @@ Clang 21.0.0, Ninja 1.13.2.
 | `cmake --preset debug && cmake --build --preset debug` | Built `Vrowser.app` and five helper bundles |
 | CEF macOS arm64 archive SHA256 | `22a510e5d348a907953278b618e1e9e442ccf78773b9fee0e09eaf154eef53b0` |
 | Smoke test, sandbox left on | `https://example.com` main frame HTTP 200, process exit 0 |
+| Chrome-style smoke (`--vrowser-smoke-test`) | exit 0, `vrowser-smoke: ok 200` |
+| Alloy-style smoke (`--use-alloy-style --vrowser-smoke-test`) | exit 0, `vrowser-smoke: ok 200` |
+| `https://expired.badssl.com/` Chrome style | Chromium keeps the error UI; no client data URL |
+| `https://expired.badssl.com/` Alloy style | Client data-URL error page via `OnLoadError` |
 | `open build/debug/apps/desktop/Debug/Vrowser.app --args --url=https://example.com` | Launched |
 
 The passing smoke command was `tools/smoke_test.sh` after the macOS keychain
@@ -55,8 +64,9 @@ Linux and Windows were not configured or run. Their entry points are in
   attribute on a temporary directory. The page load still completed.
 - During shutdown CEF can log `waitpid: No child processes` and a GPU
   shared-image error. The process still returned 0 on the verified run.
-- Chrome style shows Chromium's toolbar. A Vim-style shell still needs a
-  decision on Alloy style. See RFC 0001.
+- Chrome style shows Chromium's toolbar. The Vim shell should move to Alloy
+  style after the UI gaps listed in
+  [runtime-style.md](../architecture/runtime-style.md) are closed.
 - No tabs, commands, history, or bookmarks.
 - The macOS helpers are ad-hoc signed by the linker. A release package still
   needs a real signing and notarization pass.
@@ -69,17 +79,21 @@ Recorded in [docs/rfcs/0001-architecture.md](../rfcs/0001-architecture.md).
 CEF 156 was selected because it is the current Extended branch and this
 machine matches its Xcode 27 / macOS 26.6 build requirement.
 
+Runtime style: keep Chrome as the prototype default; target Alloy for the
+Vim shell. Details in
+[docs/architecture/runtime-style.md](../architecture/runtime-style.md).
+
 ## Next unblocked work
 
-The recommended next issue is the Alloy-style versus Chrome-style comparison.
-Do that before building a custom toolbar or command line. Linux and Windows
-CEF builds can proceed in parallel if they do not change the macOS bundle.
+Linux (#9) and Windows (#10) CEF builds can proceed in parallel. The macOS
+bundle layout check (#11), the Vim mode machine (#14), and the command
+registry (#20) are also unblocked. Permission handling should wait until the
+runtime-style note is accepted, then follow Alloy's client-owned prompt path.
 
 ## Recommended next task
 
-[Compare Alloy style and Chrome style](https://github.com/iamcaye/vrowser/issues/8)
-on macOS with the existing switches, write the result under
-`docs/architecture/`, and recommend which style the Vim shell should adopt.
-That issue is `agent-ready` and `priority:p0`. Linux (#9), Windows (#10),
-the Vim mode machine (#14), the command registry (#20), and the macOS bundle
-check (#11) are also `agent-ready` and do not depend on it.
+[Build and smoke-test the desktop shell on Linux](https://github.com/iamcaye/vrowser/issues/9)
+or [Windows](https://github.com/iamcaye/vrowser/issues/10), whichever host is
+available. Both are `agent-ready` and `priority:p1`. On macOS-only machines,
+[Check the macOS app bundle layout](https://github.com/iamcaye/vrowser/issues/11)
+is the smallest local follow-up.

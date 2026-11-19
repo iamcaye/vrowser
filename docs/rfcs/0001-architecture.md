@@ -48,9 +48,11 @@ Alloy style does not automatically provide the same permission UI.
 
 **Alloy style as the long-term UI.** The client owns the window. That matches
 a Vim shell. Alloy and Chrome do not implement the same callbacks, and
-windowless rendering is Alloy-only. Adopting Alloy as the default waits for a
-written comparison on the three desktop platforms. That comparison is the
-next research issue.
+windowless rendering is Alloy-only. The macOS comparison in
+`docs/architecture/runtime-style.md` keeps Chrome as the prototype default
+and targets Alloy for the Vim shell after permission, certificate, download,
+and find UI are owned by Vrowser. Linux and Windows still need the same
+smoke matrix.
 
 **Build Chromium from source.** Required only if Vrowser must patch the
 engine. The binary distribution is enough for the foundation.

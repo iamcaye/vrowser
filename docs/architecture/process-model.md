@@ -54,7 +54,8 @@ Chrome style and Alloy style do not share every callback. Alloy load failures
 are rendered by the client as a data URL. Chrome style keeps Chromium's error
 page. Title changes for a Views window go through `CefWindow::SetTitle`. Native
 Alloy windows use a small platform function. Those platform functions are the
-only AppKit, Win32, and X11 calls outside process startup.
+only AppKit, Win32, and X11 calls outside process startup. The full comparison
+and the Vim-shell recommendation are in [runtime-style.md](runtime-style.md).
 
 ## Threads
 
