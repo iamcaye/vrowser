@@ -16,8 +16,11 @@ started.
 - GoogleTest tests for those switches.
 - clang-format (C++ and Objective-C), clang-tidy config, editorconfig.
 - GitHub Actions workflow that runs the unit tests on Linux, macOS, and
-  Windows. The workflow is in the repository. It had not completed a run
-  when this status was written.
+  Windows. Run [44557827020](https://github.com/iamcaye/vrowser/actions/runs/44557827020)
+  completed successfully.
+- GitHub milestones M0–M4, labels, and the backlog. Foundation work is closed
+  in issues #1–#7. `tools/github/bootstrap_github.py` recreates anything
+  missing.
 - Pinned CEF 156.0.30+g6028375+chromium-156.0.8078.96, Extended channel.
   SHA256 hashes for the official platform archives are in
   `cmake/cef_version.cmake`.
@@ -74,6 +77,9 @@ CEF builds can proceed in parallel if they do not change the macOS bundle.
 
 ## Recommended next task
 
-Compare Alloy style and Chrome style on macOS with the existing switches,
-write the result under `docs/architecture/`, and recommend which style the
-Vim shell should adopt.
+[Compare Alloy style and Chrome style](https://github.com/iamcaye/vrowser/issues/8)
+on macOS with the existing switches, write the result under
+`docs/architecture/`, and recommend which style the Vim shell should adopt.
+That issue is `agent-ready` and `priority:p0`. Linux (#9), Windows (#10),
+the Vim mode machine (#14), the command registry (#20), and the macOS bundle
+check (#11) are also `agent-ready` and do not depend on it.
