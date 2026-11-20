@@ -1,4 +1,6 @@
-add_library(vrowser_core STATIC startup_config.cpp)
+add_library(vrowser_core STATIC
+  navigation.cpp
+  startup_config.cpp)
 target_include_directories(vrowser_core PUBLIC
   "${PROJECT_SOURCE_DIR}/include")
 target_compile_features(vrowser_core PUBLIC cxx_std_20)

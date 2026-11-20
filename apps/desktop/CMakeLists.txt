@@ -3,6 +3,7 @@ set(VROWSER_MAC_NAME "Vrowser")
 set(VERSION_SHORT "${PROJECT_VERSION}")
 
 set(VROWSER_SHARED_SOURCES
+  "${CMAKE_SOURCE_DIR}/src/core/navigation.cpp"
   "${CMAKE_SOURCE_DIR}/src/core/startup_config.cpp"
   "${CMAKE_SOURCE_DIR}/src/browser/cef/cef_runtime_app.cpp"
   "${CMAKE_SOURCE_DIR}/src/browser/cef/cef_browser_client.cpp"

@@ -12,7 +12,8 @@ add_executable(vrowser_unit_tests
   unit/command_registry_test.cpp
   unit/key_bindings_test.cpp
   unit/key_event_test.cpp
-  unit/mode_machine_test.cpp)
+  unit/mode_machine_test.cpp
+  unit/navigation_test.cpp)
 target_link_libraries(vrowser_unit_tests PRIVATE
   vrowser_core
   vrowser_commands
