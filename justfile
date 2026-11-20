@@ -4,6 +4,10 @@
 app := "build/debug/apps/desktop/Debug/Vrowser.app"
 bin := app / "Contents/MacOS/Vrowser"
 profile := "build/dev-profile"
+# Debug builds are re-signed on every build, so macOS would ask for the
+# "Chromium Safe Storage" keychain item on each launch. The dev profile uses
+# Chromium's mock keychain instead. Do not use this for a real profile.
+dev_flags := "--use-mock-keychain"
 
 # List recipes.
 default:
@@ -23,12 +27,12 @@ run url="https://example.com": build
       exit 1
     fi
     mkdir -p "{{ profile }}"
-    exec "{{ bin }}" --url="{{ url }}" --user-data-dir="$PWD/{{ profile }}"
+    exec "{{ bin }}" {{ dev_flags }} --url="{{ url }}" --user-data-dir="$PWD/{{ profile }}"
 
 # Launch the already built app without rebuilding.
 open url="https://example.com":
     mkdir -p "{{ profile }}"
-    "{{ bin }}" --url="{{ url }}" --user-data-dir="$PWD/{{ profile }}"
+    "{{ bin }}" {{ dev_flags }} --url="{{ url }}" --user-data-dir="$PWD/{{ profile }}"
 
 # Build and run the unit tests (no CEF download).
 test:
@@ -38,7 +42,7 @@ test:
 
 # Build, then open a window, load a page, and expect a clean exit.
 smoke: build
-    tools/smoke_test.sh
+    VROWSER_SMOKE_MOCK_KEYCHAIN=1 tools/smoke_test.sh
 
 # Check the macOS bundle layout (helpers and CEF framework).
 bundle-check: build

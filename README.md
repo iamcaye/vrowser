@@ -23,7 +23,9 @@ and checks the SHA256 in `cmake/cef_version.cmake`.
 [`just`](https://github.com/casey/just) wraps the commands below. Run `just`
 to list recipes. `just test` runs the unit tests, `just run [url]` builds and
 launches the macOS app with a profile in `build/dev-profile`, and `just smoke`
-runs the smoke check. The raw CMake commands still work without `just`.
+runs the smoke check. These recipes pass `--use-mock-keychain` so macOS does
+not ask for the "Chromium Safe Storage" keychain item after every rebuild.
+Launching the app another way still uses the login keychain. The raw CMake commands still work without `just`.
 
 Unit tests do not need CEF:
 
