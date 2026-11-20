@@ -40,6 +40,13 @@ test:
 smoke: build
     tools/smoke_test.sh
 
+# Build, then open two tabs (Alloy style), close one, and expect a clean exit.
+tab-smoke: build
+    rm -rf build/tab-smoke-profile
+    mkdir -p build/tab-smoke-profile
+    "{{ bin }}" --vrowser-tab-smoke-test --use-alloy-style --use-mock-keychain \
+      --url=https://example.com --user-data-dir="$PWD/build/tab-smoke-profile"
+
 # Check the macOS bundle layout (helpers and CEF framework).
 bundle-check: build
     tools/check_mac_bundle.sh

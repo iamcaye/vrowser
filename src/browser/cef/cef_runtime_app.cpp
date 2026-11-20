@@ -9,6 +9,7 @@
 #include <system_error>
 
 #include "browser/cef/cef_browser_client.hpp"
+#include "browser/cef/views_delegates.hpp"
 #include "include/cef_browser.h"
 #include "include/views/cef_browser_view.h"
 #include "include/views/cef_window.h"
@@ -29,73 +30,6 @@ std::string PathToUtf8(const std::filesystem::path& path) {
   }
   return out;
 }
-
-class WindowDelegate : public CefWindowDelegate {
- public:
-  WindowDelegate(CefRefPtr<CefBrowserView> browser_view,
-                 cef_runtime_style_t runtime_style)
-      : browser_view_(std::move(browser_view)), runtime_style_(runtime_style) {}
-
-  void OnWindowCreated(CefRefPtr<CefWindow> window) override {
-    window->AddChildView(browser_view_);
-    window->SetTitle("Vrowser");
-    window->Show();
-  }
-
-  void OnWindowDestroyed(CefRefPtr<CefWindow> window) override {
-    browser_view_ = nullptr;
-  }
-
-  bool CanClose(CefRefPtr<CefWindow> window) override {
-    CefRefPtr<CefBrowser> browser = browser_view_->GetBrowser();
-    if (!browser) {
-      return true;
-    }
-    // A close that has already started must be allowed to finish. Returning
-    // false here leaves the browser half-closed and the message loop running.
-    if (browser->GetHost()->IsReadyToBeClosed()) {
-      return true;
-    }
-    return browser->GetHost()->TryCloseBrowser();
-  }
-
-  CefSize GetPreferredSize(CefRefPtr<CefView> view) override {
-    return CefSize(1280, 800);
-  }
-
-  cef_runtime_style_t GetWindowRuntimeStyle() override {
-    return runtime_style_;
-  }
-
- private:
-  CefRefPtr<CefBrowserView> browser_view_;
-  const cef_runtime_style_t runtime_style_;
-
-  IMPLEMENT_REFCOUNTING(WindowDelegate);
-};
-
-class BrowserViewDelegate : public CefBrowserViewDelegate {
- public:
-  explicit BrowserViewDelegate(cef_runtime_style_t runtime_style)
-      : runtime_style_(runtime_style) {}
-
-  bool OnPopupBrowserViewCreated(CefRefPtr<CefBrowserView> browser_view,
-                                 CefRefPtr<CefBrowserView> popup_browser_view,
-                                 bool is_devtools) override {
-    CefWindow::CreateTopLevelWindow(
-        new WindowDelegate(popup_browser_view, runtime_style_));
-    return true;
-  }
-
-  cef_runtime_style_t GetBrowserRuntimeStyle() override {
-    return runtime_style_;
-  }
-
- private:
-  const cef_runtime_style_t runtime_style_;
-
-  IMPLEMENT_REFCOUNTING(BrowserViewDelegate);
-};
 
 }  // namespace
 
@@ -125,7 +59,9 @@ bool ConfigureCefSettings(CefSettings& settings, const StartupConfig& config) {
 
 CefRuntimeApp::CefRuntimeApp(StartupConfig config)
     : config_(std::move(config)),
-      client_(new CefBrowserClient(config_.alloy_style, config_.smoke_test)) {}
+      client_(new CefBrowserClient(config_.alloy_style,
+                                   config_.smoke_test,
+                                   config_.tab_smoke_test)) {}
 
 void CefRuntimeApp::OnContextInitialized() {
   CEF_REQUIRE_UI_THREAD();
@@ -138,9 +74,9 @@ void CefRuntimeApp::OnContextInitialized() {
   if (config_.use_views) {
     CefRefPtr<CefBrowserView> browser_view = CefBrowserView::CreateBrowserView(
         client_, config_.initial_url, browser_settings, nullptr, nullptr,
-        new BrowserViewDelegate(runtime_style));
+        CreateBrowserViewDelegate(runtime_style));
     CefWindow::CreateTopLevelWindow(
-        new WindowDelegate(browser_view, runtime_style));
+        CreateWindowDelegate(browser_view, runtime_style));
     return;
   }
 

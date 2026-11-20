@@ -90,7 +90,9 @@ StartupConfig ParseStartupConfig(const std::vector<std::string>& args) {
   config.user_data_dir = DefaultUserDataDirectory();
   config.alloy_style = HasSwitch(args, "use-alloy-style");
   config.use_views = !HasSwitch(args, "use-native");
-  config.smoke_test = HasSwitch(args, "vrowser-smoke-test");
+  config.tab_smoke_test = HasSwitch(args, "vrowser-tab-smoke-test");
+  config.smoke_test =
+      config.tab_smoke_test || HasSwitch(args, "vrowser-smoke-test");
 
   if (const std::optional<std::string> url = SwitchValue(args, "url")) {
     if (!url->empty()) {

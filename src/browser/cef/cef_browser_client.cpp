@@ -4,6 +4,7 @@
 #include "browser/cef/cef_browser_client.hpp"
 
 #include <cstdio>
+#include <optional>
 #include <sstream>
 #include <utility>
 
@@ -14,6 +15,7 @@
 #include "include/views/cef_window.h"
 #include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
+#include "browser/cef/views_delegates.hpp"
 
 namespace vrowser {
 namespace {
@@ -28,9 +30,12 @@ std::string DataUri(const std::string& data, const std::string& mime_type) {
 
 }  // namespace
 
-CefBrowserClient::CefBrowserClient(bool alloy_style, bool smoke_test)
+CefBrowserClient::CefBrowserClient(bool alloy_style,
+                                   bool smoke_test,
+                                   bool tab_smoke_test)
     : alloy_style_(alloy_style),
       smoke_test_(smoke_test),
+      tab_smoke_test_(tab_smoke_test),
       exit_code_(smoke_test ? 2 : 0) {
   DCHECK(g_instance == nullptr);
   g_instance = this;
@@ -65,6 +70,10 @@ void CefBrowserClient::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
   CHECK_EQ(alloy_style_ ? CEF_RUNTIME_STYLE_ALLOY : CEF_RUNTIME_STYLE_CHROME,
            browser->GetHost()->GetRuntimeStyle());
   browsers_.push_back(browser);
+  if (!browser->IsPopup()) {
+    tabs_.Append(browser->GetIdentifier());
+    ShowActiveTab();
+  }
 
   if (smoke_test_ && !smoke_timer_armed_) {
     smoke_timer_armed_ = true;
@@ -75,6 +84,26 @@ void CefBrowserClient::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
 
 bool CefBrowserClient::DoClose(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
+  const TabId id = browser->GetIdentifier();
+  if (tabs_.Contains(id) && tabs_.size() > 1) {
+    CefRefPtr<CefBrowserView> view = CefBrowserView::GetForBrowser(browser);
+    CefRefPtr<CefWindow> window = view ? view->GetWindow() : nullptr;
+    if (window) {
+      // Other tabs remain, so close only this tab: take its view out of the
+      // window instead of letting CEF close the window. Removing the last
+      // reference to the view destroys the browser and calls OnBeforeClose.
+      // Do it in a task so the view is not destroyed inside DoClose.
+      tabs_.Close(id);
+      ShowActiveTab();
+      CefPostTask(TID_UI, base::BindOnce(
+                              [](CefRefPtr<CefWindow> parent,
+                                 CefRefPtr<CefBrowserView> child) {
+                                parent->RemoveChildView(child);
+                              },
+                              window, view));
+      return true;
+    }
+  }
   if (browsers_.size() == 1) {
     is_closing_ = true;
   }
@@ -90,6 +119,11 @@ void CefBrowserClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
       break;
     }
   }
+  const TabId id = browser->GetIdentifier();
+  if (tabs_.Close(id)) {
+    ShowActiveTab();
+  }
+  TabSmokeClosed(id);
   if (browsers_.empty()) {
     CefQuitMessageLoop();
   }
@@ -117,6 +151,10 @@ void CefBrowserClient::OnLoadEnd(CefRefPtr<CefBrowser> browser,
   }
   std::fprintf(stderr, "vrowser: load-end %d %s\n", http_status_code,
                frame->GetURL().ToString().c_str());
+  if (tab_smoke_test_ && http_status_code >= 200 && http_status_code < 400) {
+    TabSmokeLoadEnd(browser);
+    return;
+  }
   if (smoke_test_ && http_status_code >= 200 && http_status_code < 400) {
     std::fprintf(stderr, "vrowser-smoke: ok %d %s\n", http_status_code,
                  frame->GetURL().ToString().c_str());
@@ -157,10 +195,10 @@ void CefBrowserClient::ShowMainWindow() {
                 base::BindOnce(&CefBrowserClient::ShowMainWindow, this));
     return;
   }
-  if (browsers_.empty()) {
+  CefRefPtr<CefBrowser> browser = ActiveBrowser();
+  if (!browser) {
     return;
   }
-  CefRefPtr<CefBrowser> browser = browsers_.front();
   if (CefRefPtr<CefBrowserView> browser_view =
           CefBrowserView::GetForBrowser(browser)) {
     if (CefRefPtr<CefWindow> window = browser_view->GetWindow()) {
@@ -207,11 +245,151 @@ void CefBrowserClient::Navigate(const std::string& url) {
 
 void CefBrowserClient::LoadInMainFrame(const std::string& url) {
   CEF_REQUIRE_UI_THREAD();
-  if (browsers_.empty()) {
+  CefRefPtr<CefBrowser> browser = ActiveBrowser();
+  if (!browser) {
     return;
   }
   std::fprintf(stderr, "vrowser: navigate %s\n", url.c_str());
-  browsers_.front()->GetMainFrame()->LoadURL(url);
+  browser->GetMainFrame()->LoadURL(url);
+}
+
+void CefBrowserClient::OpenTab(const std::string& url) {
+  if (!CefCurrentlyOn(TID_UI)) {
+    CefPostTask(TID_UI, base::BindOnce(&CefBrowserClient::OpenTab, this, url));
+    return;
+  }
+  if (!alloy_style_) {
+    // Observed on macOS with CEF 156: a second Chrome-style browser view added
+    // to the window is never created. Tabs follow the Alloy shell plan in
+    // docs/architecture/runtime-style.md.
+    std::fprintf(stderr, "vrowser: tabs need --use-alloy-style\n");
+    if (tab_smoke_test_) {
+      FinishSmoke(1);
+    }
+    return;
+  }
+  CefRefPtr<CefBrowser> current = ActiveBrowser();
+  CefRefPtr<CefBrowserView> current_view =
+      current ? CefBrowserView::GetForBrowser(current) : nullptr;
+  CefRefPtr<CefWindow> window =
+      current_view ? current_view->GetWindow() : nullptr;
+  if (!window) {
+    std::fprintf(stderr, "vrowser: tabs need a Views window\n");
+    return;
+  }
+  const cef_runtime_style_t runtime_style =
+      alloy_style_ ? CEF_RUNTIME_STYLE_ALLOY : CEF_RUNTIME_STYLE_DEFAULT;
+  CefBrowserSettings browser_settings;
+  std::fprintf(stderr, "vrowser: open-tab %s\n", url.c_str());
+  // OnAfterCreated appends the new browser to tabs_ and shows it.
+  window->AddChildView(CefBrowserView::CreateBrowserView(
+      this, url, browser_settings, nullptr, nullptr,
+      CreateBrowserViewDelegate(runtime_style)));
+}
+
+void CefBrowserClient::CloseTab(TabId id) {
+  if (!CefCurrentlyOn(TID_UI)) {
+    CefPostTask(TID_UI, base::BindOnce(&CefBrowserClient::CloseTab, this, id));
+    return;
+  }
+  if (CefRefPtr<CefBrowser> browser = FindBrowser(id)) {
+    std::fprintf(stderr, "vrowser: close-tab %d\n", id);
+    browser->GetHost()->CloseBrowser(false);
+  }
+}
+
+bool CefBrowserClient::CanCloseWindow(CefRefPtr<CefWindow> window) {
+  CEF_REQUIRE_UI_THREAD();
+  bool ready = true;
+  const BrowserList snapshot = browsers_;
+  for (const CefRefPtr<CefBrowser>& browser : snapshot) {
+    CefRefPtr<CefBrowserView> view = CefBrowserView::GetForBrowser(browser);
+    CefRefPtr<CefWindow> parent = view ? view->GetWindow() : nullptr;
+    if (!parent || !parent->IsSame(window)) {
+      continue;
+    }
+    // A close that has already started must be allowed to finish. Returning
+    // false then would leave the browser half-closed and the loop running.
+    CefRefPtr<CefBrowserHost> host = browser->GetHost();
+    if (!host->IsReadyToBeClosed() && !host->TryCloseBrowser()) {
+      ready = false;
+    }
+  }
+  return ready;
+}
+
+CefRefPtr<CefBrowser> CefBrowserClient::FindBrowser(TabId id) const {
+  for (const CefRefPtr<CefBrowser>& browser : browsers_) {
+    if (browser->GetIdentifier() == id) {
+      return browser;
+    }
+  }
+  return nullptr;
+}
+
+CefRefPtr<CefBrowser> CefBrowserClient::ActiveBrowser() const {
+  if (const std::optional<TabId> active = tabs_.active()) {
+    if (CefRefPtr<CefBrowser> browser = FindBrowser(*active)) {
+      return browser;
+    }
+  }
+  return browsers_.empty() ? nullptr : browsers_.front();
+}
+
+void CefBrowserClient::ShowActiveTab() {
+  CEF_REQUIRE_UI_THREAD();
+  const std::optional<TabId> active = tabs_.active();
+  CefRefPtr<CefWindow> window;
+  for (const TabId id : tabs_.tabs()) {
+    CefRefPtr<CefBrowser> browser = FindBrowser(id);
+    CefRefPtr<CefBrowserView> view =
+        browser ? CefBrowserView::GetForBrowser(browser) : nullptr;
+    if (!view) {
+      continue;
+    }
+    view->SetVisible(active == id);
+    if (!window) {
+      window = view->GetWindow();
+    }
+  }
+  if (window) {
+    window->Layout();
+  }
+}
+
+void CefBrowserClient::TabSmokeLoadEnd(CefRefPtr<CefBrowser> browser) {
+  CEF_REQUIRE_UI_THREAD();
+  const TabId id = browser->GetIdentifier();
+  if (tab_smoke_stage_ == 0) {
+    tab_smoke_stage_ = 1;
+    tab_smoke_first_ = id;
+    OpenTab(browser->GetMainFrame()->GetURL().ToString());
+    return;
+  }
+  if (tab_smoke_stage_ == 1 && id != tab_smoke_first_) {
+    tab_smoke_stage_ = 2;
+    std::fprintf(stderr, "vrowser-smoke: tabs open %zu\n", tabs_.size());
+    if (tabs_.size() != 2 || tabs_.active() != id) {
+      FinishSmoke(1);
+      return;
+    }
+    CloseTab(tab_smoke_first_);
+  }
+}
+
+void CefBrowserClient::TabSmokeClosed(TabId id) {
+  if (!tab_smoke_test_ || tab_smoke_stage_ != 2 || id != tab_smoke_first_) {
+    return;
+  }
+  CefRefPtr<CefBrowser> remaining = ActiveBrowser();
+  CefRefPtr<CefBrowserView> view =
+      remaining ? CefBrowserView::GetForBrowser(remaining) : nullptr;
+  const bool ok = tabs_.size() == 1 && view && view->IsVisible() &&
+                  view->GetWindow() && view->GetWindow()->IsVisible();
+  std::fprintf(stderr, "vrowser-smoke: tabs %s, %zu open, remaining %s\n",
+               ok ? "ok" : "failed", tabs_.size(),
+               view && view->IsVisible() ? "visible" : "hidden");
+  FinishSmoke(ok ? 0 : 1);
 }
 
 void CefBrowserClient::OnSmokeTimeout() {
