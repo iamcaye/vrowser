@@ -16,9 +16,10 @@ started.
 - C++20 library `vrowser_commands` with a command registry and a
   whitespace command-line parser. No CEF headers.
 - C++20 library `vrowser_vim` with the mode state machine (Normal, Insert,
-  Command, Hint). No CEF headers.
-- GoogleTest tests for startup switches, the command registry, and mode
-  transitions.
+  Command, Hint) and `NormalizeKey`, which maps CEF-shaped key events to one
+  `KeyEvent` type. No CEF headers.
+- GoogleTest tests for startup switches, the command registry, mode
+  transitions, and key normalization.
 - clang-format (C++ and Objective-C), clang-tidy config, editorconfig.
 - GitHub Actions workflow that runs the unit tests on Linux, macOS, and
   Windows. Run [44557827020](https://github.com/iamcaye/vrowser/actions/runs/44557827020)
@@ -46,7 +47,7 @@ Clang 21.0.0, Ninja 1.13.2.
 
 | Check | Result |
 | --- | --- |
-| `cmake --preset ci && cmake --build --preset ci && ctest --preset ci` | 32 tests passed |
+| `cmake --preset ci && cmake --build --preset ci && ctest --preset ci` | 44 tests passed |
 | `ctest --test-dir build/debug` | 9 tests passed (older local debug tree) |
 | `cmake --preset debug && cmake --build --preset debug` | Built `Vrowser.app` and five helper bundles |
 | CEF macOS arm64 archive SHA256 | `22a510e5d348a907953278b618e1e9e442ccf78773b9fee0e09eaf154eef53b0` |
@@ -94,13 +95,11 @@ Vim shell. Details in
 
 ## Next unblocked work
 
-The Vim mode machine (#14) and the command registry (#20) are done. Key
-normalization (#15) is now unblocked but needs the `agent-ready` label, as does
-navigation in the open window (#12). Permission handling should follow Alloy's
-client-owned prompt path.
+Key normalization (#15) is done. The keybinding registry (#16) and then counts
+and multi-key sequences (#17) build on it without a window. Navigation in the
+open window (#12) is the smallest p0. Permission handling should follow
+Alloy's client-owned prompt path.
 
 ## Recommended next task
 
-Label the next issue `agent-ready`. [Normalize keyboard events](https://github.com/iamcaye/vrowser/issues/15)
-builds on the mode machine without a window. [Navigate the already open window](https://github.com/iamcaye/vrowser/issues/12)
-(`priority:p0`) is the smallest p0 candidate.
+[Add the keybinding registry](https://github.com/iamcaye/vrowser/issues/16).
