@@ -4,6 +4,7 @@
 #include "browser/cef/cef_browser_client.hpp"
 
 #include <cstdio>
+#include <iterator>
 #include <optional>
 #include <sstream>
 #include <utility>
@@ -15,12 +16,46 @@
 #include "include/views/cef_window.h"
 #include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
+#include "browser/cef/cef_renderer_app.hpp"
 #include "browser/cef/views_delegates.hpp"
+#include "vrowser/vim/key_event.hpp"
 
 namespace vrowser {
 namespace {
 
 CefBrowserClient* g_instance = nullptr;
+
+RawKeyType ToRawKeyType(cef_key_event_type_t type) {
+  switch (type) {
+    case KEYEVENT_RAWKEYDOWN:
+      return RawKeyType::kRawKeyDown;
+    case KEYEVENT_KEYDOWN:
+      return RawKeyType::kKeyDown;
+    case KEYEVENT_KEYUP:
+      return RawKeyType::kKeyUp;
+    case KEYEVENT_CHAR:
+    default:
+      return RawKeyType::kChar;
+  }
+}
+
+RawKeyInput ToRawKeyInput(const CefKeyEvent& event) {
+  RawKeyInput input;
+  input.type = ToRawKeyType(event.type);
+  input.windows_key_code = event.windows_key_code;
+  // A lone UTF-16 surrogate is not a character on its own.
+  const char16_t character = event.character;
+  input.character = (character >= 0xD800 && character <= 0xDFFF)
+                        ? 0
+                        : static_cast<char32_t>(character);
+  input.modifiers = event.modifiers;
+  return input;
+}
+
+static_assert(kRawModifierShift == EVENTFLAG_SHIFT_DOWN);
+static_assert(kRawModifierControl == EVENTFLAG_CONTROL_DOWN);
+static_assert(kRawModifierAlt == EVENTFLAG_ALT_DOWN);
+static_assert(kRawModifierMeta == EVENTFLAG_COMMAND_DOWN);
 
 std::string DataUri(const std::string& data, const std::string& mime_type) {
   return "data:" + mime_type + ";base64," +
@@ -30,18 +65,97 @@ std::string DataUri(const std::string& data, const std::string& mime_type) {
 
 }  // namespace
 
-CefBrowserClient::CefBrowserClient(bool alloy_style,
-                                   bool smoke_test,
-                                   bool tab_smoke_test)
-    : alloy_style_(alloy_style),
-      smoke_test_(smoke_test),
-      tab_smoke_test_(tab_smoke_test),
-      exit_code_(smoke_test ? 2 : 0) {
+CefBrowserClient::CefBrowserClient(const StartupConfig& config)
+    : alloy_style_(config.alloy_style),
+      smoke_test_(config.smoke_test),
+      tab_smoke_test_(config.tab_smoke_test),
+      key_smoke_test_(config.key_smoke_test),
+      exit_code_(config.smoke_test ? 2 : 0) {
   DCHECK(g_instance == nullptr);
   g_instance = this;
   // The controller is a member, so the listener cannot outlive `this`.
   navigation_.SetListener(
       [this](const std::string& url) { LoadInMainFrame(url); });
+  RegisterCommands();
+}
+
+void CefBrowserClient::RegisterCommands() {
+  // `this` owns the registry, so handlers cannot outlive it. Handlers run on
+  // the UI thread from OnPreKeyEvent.
+  commands_.Register("reload", "Reload the current page",
+                     [this](const std::vector<std::string>&) {
+                       if (CefRefPtr<CefBrowser> browser = ActiveBrowser()) {
+                         browser->Reload();
+                       }
+                       return CommandResult::Ok();
+                     });
+  bindings_.Bind(Mode::kNormal, "r", "reload");
+}
+
+void CefBrowserClient::RunBinding(const KeyDispatch& dispatch) {
+  const CommandResult result =
+      commands_.Run(dispatch.action->command, dispatch.action->args);
+  std::fprintf(
+      stderr, "vrowser: command %s%s%s\n", dispatch.action->command.c_str(),
+      result.ok() ? "" : " failed: ", std::string(result.error()).c_str());
+}
+
+bool CefBrowserClient::OnProcessMessageReceived(
+    CefRefPtr<CefBrowser> browser,
+    CefRefPtr<CefFrame> frame,
+    CefProcessId source_process,
+    CefRefPtr<CefProcessMessage> message) {
+  CEF_REQUIRE_UI_THREAD();
+  // Renderer messages are untrusted. Accept only the one message the
+  // renderer app sends, with the expected argument type.
+  if (source_process != PID_RENDERER ||
+      message->GetName() != kEditableFocusMessage) {
+    return false;
+  }
+  CefRefPtr<CefListValue> args = message->GetArgumentList();
+  if (args->GetSize() != 1 || args->GetType(0) != VTYPE_BOOL) {
+    return true;
+  }
+  const bool editable = args->GetBool(0);
+  KeyInputState& input = key_inputs_[browser->GetIdentifier()];
+  const Mode before = input.mode.mode();
+  input.mode.Apply(editable ? ModeEvent::kEditableFocusGained
+                            : ModeEvent::kEditableFocusLost);
+  if (input.mode.mode() != before) {
+    std::fprintf(stderr, "vrowser: mode %s\n",
+                 input.mode.mode() == Mode::kInsert ? "insert" : "normal");
+    if (key_smoke_test_) {
+      KeySmokeStep(browser, input.mode.mode() == Mode::kInsert ? "mode insert"
+                                                               : "mode normal");
+    }
+  }
+  return true;
+}
+
+bool CefBrowserClient::OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
+                                     const CefKeyEvent& event,
+                                     CefEventHandle os_event,
+                                     bool* is_keyboard_shortcut) {
+  CEF_REQUIRE_UI_THREAD();
+  const std::optional<KeyEvent> key = NormalizeKey(ToRawKeyInput(event));
+  if (!key) {
+    return false;
+  }
+  KeyInputState& input = key_inputs_[browser->GetIdentifier()];
+  const Mode before = input.mode.mode();
+  const KeyDispatch dispatch = DispatchKey(bindings_, input, *key);
+  if (input.mode.mode() != before) {
+    std::fprintf(stderr, "vrowser: mode %s\n",
+                 input.mode.mode() == Mode::kInsert ? "insert" : "normal");
+    if (key_smoke_test_) {
+      KeySmokeStep(browser, input.mode.mode() == Mode::kInsert ? "mode insert"
+                                                               : "mode normal");
+    }
+  }
+  if (dispatch.action) {
+    RunBinding(dispatch);
+  }
+  return dispatch.disposition == KeyDisposition::kConsume;
 }
 
 CefBrowserClient::~CefBrowserClient() {
@@ -55,6 +169,9 @@ CefBrowserClient* CefBrowserClient::GetInstance() {
 void CefBrowserClient::OnTitleChange(CefRefPtr<CefBrowser> browser,
                                      const CefString& title) {
   CEF_REQUIRE_UI_THREAD();
+  if (key_smoke_test_) {
+    KeySmokeStep(browser, "title " + title.ToString());
+  }
   if (CefRefPtr<CefBrowserView> browser_view =
           CefBrowserView::GetForBrowser(browser)) {
     if (CefRefPtr<CefWindow> window = browser_view->GetWindow()) {
@@ -120,6 +237,7 @@ void CefBrowserClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
     }
   }
   const TabId id = browser->GetIdentifier();
+  key_inputs_.erase(id);
   if (tabs_.Close(id)) {
     ShowActiveTab();
   }
@@ -151,6 +269,10 @@ void CefBrowserClient::OnLoadEnd(CefRefPtr<CefBrowser> browser,
   }
   std::fprintf(stderr, "vrowser: load-end %d %s\n", http_status_code,
                frame->GetURL().ToString().c_str());
+  if (key_smoke_test_) {
+    KeySmokeStep(browser, "load-end");
+    return;
+  }
   if (tab_smoke_test_ && http_status_code >= 200 && http_status_code < 400) {
     TabSmokeLoadEnd(browser);
     return;
@@ -408,6 +530,127 @@ void CefBrowserClient::FinishSmoke(int code) {
   smoke_finished_ = true;
   exit_code_ = code;
   CloseAllBrowsers(true);
+}
+
+}  // namespace vrowser
+
+namespace vrowser {
+
+std::string CefBrowserClient::KeySmokePageUrl() {
+  // Logs every keydown the page sees into the title, with the focused id.
+  return DataUri(
+      "<!doctype html><title>ready</title><input id=f>"
+      "<script>addEventListener('keydown', e => { document.title = 'key:' + "
+      "e.key + ':' + (document.activeElement.id || 'body'); }, true);"
+      "</script>",
+      "text/html");
+}
+
+void CefBrowserClient::SendTestKey(CefRefPtr<CefBrowser> browser,
+                                   int windows_key_code,
+                                   int mac_key_code,
+                                   char16_t character) {
+  CefRefPtr<CefBrowserHost> host = browser->GetHost();
+  host->SetFocus(true);
+#if defined(OS_MAC)
+  // CefBrowserHost::SendKeyEvent trips a Chromium DCHECK for windowed
+  // browsers on macOS, so send a native event instead.
+  (void)windows_key_code;
+  PlatformSendTestKey(browser, mac_key_code, character);
+#else
+  // Untested: Linux and Windows have not run the key smoke test.
+  (void)mac_key_code;
+  CefKeyEvent event;
+  event.windows_key_code = windows_key_code;
+  event.native_key_code = mac_key_code;
+  event.character = character;
+  event.unmodified_character = character;
+  event.type = KEYEVENT_RAWKEYDOWN;
+  host->SendKeyEvent(event);
+  if (character >= 0x20) {
+    event.type = KEYEVENT_CHAR;
+    host->SendKeyEvent(event);
+  }
+  event.type = KEYEVENT_KEYUP;
+  host->SendKeyEvent(event);
+#endif
+}
+
+// Each step waits for one event, then acts. Any page title showing a key the
+// shell should have consumed fails the run.
+void CefBrowserClient::KeySmokeStep(CefRefPtr<CefBrowser> browser,
+                                    const std::string& event) {
+  CEF_REQUIRE_UI_THREAD();
+  if (smoke_finished_) {
+    return;
+  }
+  if (alloy_style_) {
+    // Observed on macOS: synthesized key events reach OnPreKeyEvent but not
+    // the page in Alloy style, with or without a keyboard handler. Real typing
+    // has to be checked by hand there.
+    std::fprintf(stderr, "vrowser-smoke: key smoke needs Chrome style\n");
+    FinishSmoke(1);
+    return;
+  }
+  if (event == "title key:r:body" || event.starts_with("title key:Escape")) {
+    std::fprintf(stderr, "vrowser-smoke: keys failed, page saw %s\n",
+                 event.c_str());
+    FinishSmoke(1);
+    return;
+  }
+  constexpr int kVkX = 'X', kMacX = 7;
+  constexpr int kVkR = 'R', kMacR = 15;
+  constexpr int kVkEscape = 0x1B, kMacEscape = 53;
+
+  struct Step {
+    const char* wait_for;
+    const char* note;
+  };
+  static constexpr Step kSteps[] = {
+      {"load-end", "page loaded; unbound x goes to the page"},
+      {"title key:x:body", "bound r reloads and stays out of the page"},
+      {"load-end", "reloaded; focus the text field"},
+      {"mode insert", "Insert mode; r goes to the field"},
+      {"title key:r:f", "Escape leaves Insert"},
+      {"mode normal", "Normal mode; x goes to the page, Escape did not"},
+      {"title key:x:f", "done"},
+  };
+  if (key_smoke_step_ >= static_cast<int>(std::size(kSteps)) ||
+      event != kSteps[key_smoke_step_].wait_for) {
+    return;
+  }
+  std::fprintf(stderr, "vrowser-smoke: step %d %s: %s\n", key_smoke_step_,
+               event.c_str(), kSteps[key_smoke_step_].note);
+  switch (key_smoke_step_++) {
+    case 0:
+      CefPostTask(TID_UI, base::BindOnce(&CefBrowserClient::SendTestKey, this,
+                                         browser, kVkX, kMacX, u'x'));
+      break;
+    case 1:
+      CefPostTask(TID_UI, base::BindOnce(&CefBrowserClient::SendTestKey, this,
+                                         browser, kVkR, kMacR, u'r'));
+      break;
+    case 2:
+      browser->GetMainFrame()->ExecuteJavaScript(
+          "document.getElementById('f').focus()", "", 0);
+      break;
+    case 3:
+      CefPostTask(TID_UI, base::BindOnce(&CefBrowserClient::SendTestKey, this,
+                                         browser, kVkR, kMacR, u'r'));
+      break;
+    case 4:
+      CefPostTask(TID_UI, base::BindOnce(&CefBrowserClient::SendTestKey, this,
+                                         browser, kVkEscape, kMacEscape, 0x1B));
+      break;
+    case 5:
+      CefPostTask(TID_UI, base::BindOnce(&CefBrowserClient::SendTestKey, this,
+                                         browser, kVkX, kMacX, u'x'));
+      break;
+    case 6:
+      std::fprintf(stderr, "vrowser-smoke: keys ok\n");
+      FinishSmoke(0);
+      break;
+  }
 }
 
 }  // namespace vrowser

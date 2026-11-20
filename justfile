@@ -44,6 +44,13 @@ test:
 smoke: build
     VROWSER_SMOKE_MOCK_KEYCHAIN=1 tools/smoke_test.sh
 
+# Build, then send keys to a test page and check Normal and Insert modes.
+key-smoke: build
+    rm -rf build/key-smoke-profile
+    mkdir -p build/key-smoke-profile
+    "{{ bin }}" --vrowser-key-smoke-test {{ dev_flags }} \
+      --user-data-dir="$PWD/build/key-smoke-profile"
+
 # Build, then open two tabs (Alloy style), close one, and expect a clean exit.
 tab-smoke: build
     rm -rf build/tab-smoke-profile

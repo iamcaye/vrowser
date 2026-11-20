@@ -1,6 +1,7 @@
 // Copyright 2026 The Vrowser Authors
 // SPDX-License-Identifier: Apache-2.0
 
+#include "browser/cef/cef_renderer_app.hpp"
 #include "browser/cef/cef_runtime_app.hpp"
 #include "include/base/cef_build.h"
 #include "include/cef_app.h"
@@ -28,7 +29,8 @@ int XIOErrorHandlerImpl(Display* display) {
 
 NO_STACK_PROTECTOR int main(int argc, char* argv[]) {
   CefMainArgs main_args(argc, argv);
-  const int subprocess = CefExecuteProcess(main_args, nullptr, nullptr);
+  CefRefPtr<CefApp> subprocess_app(new vrowser::CefRendererApp());
+  const int subprocess = CefExecuteProcess(main_args, subprocess_app, nullptr);
   if (subprocess >= 0) {
     return subprocess;
   }

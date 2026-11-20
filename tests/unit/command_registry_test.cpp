@@ -111,5 +111,17 @@ TEST(CommandRegistryTest, ContainsReportsRegistration) {
   EXPECT_TRUE(registry.Contains("open"));
 }
 
+TEST(CommandRegistryTest, RunByNameUsesArguments) {
+  CommandRegistry registry;
+  Args received;
+  registry.Register("open", "Open a URL", [&received](const Args& args) {
+    received = args;
+    return CommandResult::Ok();
+  });
+  EXPECT_TRUE(registry.Run("open", {"a b"}).ok());
+  EXPECT_EQ(received, Args{"a b"});
+  EXPECT_EQ(registry.Run("missing", {}).error(), "Unknown command: missing");
+}
+
 }  // namespace
 }  // namespace vrowser

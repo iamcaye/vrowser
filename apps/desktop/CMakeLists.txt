@@ -3,12 +3,18 @@ set(VROWSER_MAC_NAME "Vrowser")
 set(VERSION_SHORT "${PROJECT_VERSION}")
 
 set(VROWSER_SHARED_SOURCES
+  "${CMAKE_SOURCE_DIR}/src/commands/command_registry.cpp"
   "${CMAKE_SOURCE_DIR}/src/core/navigation.cpp"
   "${CMAKE_SOURCE_DIR}/src/core/startup_config.cpp"
   "${CMAKE_SOURCE_DIR}/src/core/tab_list.cpp"
   "${CMAKE_SOURCE_DIR}/src/browser/cef/cef_runtime_app.cpp"
   "${CMAKE_SOURCE_DIR}/src/browser/cef/cef_browser_client.cpp"
   "${CMAKE_SOURCE_DIR}/src/browser/cef/views_delegates.cpp"
+  "${CMAKE_SOURCE_DIR}/src/browser/cef/cef_renderer_app.cpp"
+  "${CMAKE_SOURCE_DIR}/src/vim/key_bindings.cpp"
+  "${CMAKE_SOURCE_DIR}/src/vim/key_dispatcher.cpp"
+  "${CMAKE_SOURCE_DIR}/src/vim/key_event.cpp"
+  "${CMAKE_SOURCE_DIR}/src/vim/mode_machine.cpp"
 )
 
 if(OS_MAC)
@@ -17,7 +23,10 @@ if(OS_MAC)
     main_mac.mm
     "${CMAKE_SOURCE_DIR}/src/browser/cef/cef_browser_client_mac.mm"
   )
-  set(VROWSER_HELPER_SOURCES helper_mac.cc)
+  set(VROWSER_HELPER_SOURCES
+    helper_mac.cc
+    "${CMAKE_SOURCE_DIR}/src/browser/cef/cef_renderer_app.cpp"
+  )
 elseif(OS_LINUX)
   set(VROWSER_SOURCES
     ${VROWSER_SHARED_SOURCES}
@@ -93,6 +102,9 @@ if(OS_MAC)
     SET_EXECUTABLE_TARGET_PROPERTIES(${helper_target})
     add_dependencies(${helper_target} libcef_dll_wrapper)
     target_link_libraries(${helper_target} libcef_dll_wrapper ${CEF_STANDARD_LIBS})
+    target_include_directories(${helper_target} PRIVATE
+      "${CMAKE_SOURCE_DIR}/include"
+      "${CMAKE_SOURCE_DIR}/src")
     set_target_properties(${helper_target} PROPERTIES
       MACOSX_BUNDLE_INFO_PLIST "${helper_info_plist}"
       OUTPUT_NAME "${helper_output_name}")

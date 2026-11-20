@@ -144,6 +144,8 @@ Switches:
 - `--vrowser-smoke-test` quit after the main frame load.
 - `--vrowser-tab-smoke-test` open a second tab, close the first, and quit.
   Needs `--use-alloy-style`. `just tab-smoke` runs it.
+- `--vrowser-key-smoke-test` send keys to a built-in page and check Normal and
+  Insert modes. Chrome style only. `just key-smoke` runs it.
 
 Format:
 

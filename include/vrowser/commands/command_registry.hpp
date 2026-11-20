@@ -72,6 +72,11 @@ class CommandRegistry {
   // an error result.
   CommandResult Execute(std::string_view line) const;
 
+  // Runs a command by name, as a key binding does. Unknown names return an
+  // error result.
+  CommandResult Run(std::string_view name,
+                    const std::vector<std::string>& args) const;
+
  private:
   struct Entry {
     std::string description;

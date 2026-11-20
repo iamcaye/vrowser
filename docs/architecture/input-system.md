@@ -45,8 +45,8 @@ is unit-tested without CEF.
 
 A binding resolves to a command name plus arguments, not to a function pointer
 buried in the UI. The command registry will live in `src/commands` and will be
-callable from a key binding, the command line, and a later CLI. The prototype
-does not register commands yet. `--url` is a process switch parsed in
+callable from a key binding, the command line, and a later CLI. The browser
+client registers `reload`, bound to `r` in Normal mode. `--url` is a process switch parsed in
 `src/core`, not a command.
 
 ## Hints
@@ -64,6 +64,15 @@ create more than one tab and can report frame focus.
 - Dock reopen, which shows the existing window.
 - A second launch with the same profile, which is routed by CEF to
   `OnAlreadyRunningAppRelaunch`.
-
-Page keyboard input is otherwise left to Chromium, which is the correct
-behavior until Normal mode exists.
+- Normal and Insert in the window. `CefBrowserClient::OnPreKeyEvent`
+  normalizes each key (`NormalizeKey`) and asks `DispatchKey` in `src/vim`
+  whether to consume it. Normal mode consumes keys that complete or extend a
+  binding and forwards the rest, so browser shortcuts still work. Insert mode
+  forwards everything except Escape, which returns to Normal and is consumed.
+  Mode and pending keys are kept per tab.
+- Editable focus. The renderer's `CefRendererApp::OnFocusedNodeChanged` sends
+  `vrowser.editable-focus` with one bool. The browser accepts only that message
+  shape from `PID_RENDERER` and uses it only to switch that tab between Normal
+  and Insert. Focus inside cross-process iframes is #23.
+- One default binding: `r` runs the `reload` command through the
+  `CommandRegistry`. Scrolling bindings are #19.

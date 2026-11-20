@@ -4,32 +4,54 @@
 #pragma once
 
 #include <list>
+#include <map>
 #include <string>
 
 #include "include/cef_client.h"
 #include "include/views/cef_browser_view.h"
 #include "include/views/cef_window.h"
 #include "vrowser/core/navigation.hpp"
+#include "vrowser/core/startup_config.hpp"
+#include "vrowser/commands/command_registry.hpp"
 #include "vrowser/core/tab_list.hpp"
+#include "vrowser/vim/key_bindings.hpp"
+#include "vrowser/vim/key_dispatcher.hpp"
 
 namespace vrowser {
 
 class CefBrowserClient : public CefClient,
                          public CefDisplayHandler,
+                         public CefKeyboardHandler,
                          public CefLifeSpanHandler,
                          public CefLoadHandler {
  public:
-  CefBrowserClient(bool alloy_style, bool smoke_test, bool tab_smoke_test);
+  explicit CefBrowserClient(const StartupConfig& config);
+
+  // data: URL of the page --vrowser-key-smoke-test loads.
+  static std::string KeySmokePageUrl();
   ~CefBrowserClient() override;
 
   static CefBrowserClient* GetInstance();
 
   CefRefPtr<CefDisplayHandler> GetDisplayHandler() override { return this; }
+  CefRefPtr<CefKeyboardHandler> GetKeyboardHandler() override { return this; }
   CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
   CefRefPtr<CefLoadHandler> GetLoadHandler() override { return this; }
 
+  bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
+                                CefRefPtr<CefFrame> frame,
+                                CefProcessId source_process,
+                                CefRefPtr<CefProcessMessage> message) override;
+
   void OnTitleChange(CefRefPtr<CefBrowser> browser,
                      const CefString& title) override;
+
+  // Normal-mode keys that match a binding are consumed here, before the page
+  // sees them. Insert-mode keys go to the page, except Escape.
+  bool OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
+                     const CefKeyEvent& event,
+                     CefEventHandle os_event,
+                     bool* is_keyboard_shortcut) override;
 
   void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
   bool DoClose(CefRefPtr<CefBrowser> browser) override;
@@ -70,6 +92,11 @@ class CefBrowserClient : public CefClient,
   void PlatformTitleChange(CefRefPtr<CefBrowser> browser,
                            const CefString& title);
   void PlatformShowWindow(CefRefPtr<CefBrowser> browser);
+  // macOS only: delivers a synthesized NSEvent key-down and key-up to the
+  // browser's window, which takes the same path as a typed key.
+  void PlatformSendTestKey(CefRefPtr<CefBrowser> browser,
+                           int mac_key_code,
+                           char16_t character);
   void LoadInMainFrame(const std::string& url);
   CefRefPtr<CefBrowser> FindBrowser(TabId id) const;
   CefRefPtr<CefBrowser> ActiveBrowser() const;
@@ -77,12 +104,22 @@ class CefBrowserClient : public CefClient,
   void ShowActiveTab();
   void TabSmokeLoadEnd(CefRefPtr<CefBrowser> browser);
   void TabSmokeClosed(TabId id);
+  void RegisterCommands();
+  void KeySmokeStep(CefRefPtr<CefBrowser> browser, const std::string& event);
+  void SendTestKey(CefRefPtr<CefBrowser> browser,
+                   int windows_key_code,
+                   int mac_key_code,
+                   char16_t character);
+  void RunBinding(const KeyDispatch& dispatch);
   void OnSmokeTimeout();
   void FinishSmoke(int code);
 
   const bool alloy_style_;
   const bool smoke_test_;
   const bool tab_smoke_test_;
+  const bool key_smoke_test_;
+  // Key smoke: index of the step waiting for its event. See KeySmokeStep.
+  int key_smoke_step_ = 0;
   // Tab smoke: 0 waits for the first load, 1 for the second tab's load, 2 for
   // the first tab to close.
   int tab_smoke_stage_ = 0;
@@ -99,6 +136,10 @@ class CefBrowserClient : public CefClient,
   // Tabs of the main window, UI thread only. Popups have their own windows
   // and are not tabs.
   TabList tabs_;
+  // Keyboard state per browser, UI thread only.
+  std::map<TabId, KeyInputState> key_inputs_;
+  KeyBindings bindings_;
+  CommandRegistry commands_;
 
   IMPLEMENT_REFCOUNTING(CefBrowserClient);
 };

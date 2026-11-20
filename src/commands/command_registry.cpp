@@ -85,11 +85,16 @@ CommandResult CommandRegistry::Execute(std::string_view line) const {
   if (parsed.name.empty()) {
     return CommandResult::Error("Empty command");
   }
-  const auto it = commands_.find(parsed.name);
+  return Run(parsed.name, parsed.args);
+}
+
+CommandResult CommandRegistry::Run(std::string_view name,
+                                   const std::vector<std::string>& args) const {
+  const auto it = commands_.find(name);
   if (it == commands_.end()) {
-    return CommandResult::Error("Unknown command: " + parsed.name);
+    return CommandResult::Error("Unknown command: " + std::string(name));
   }
-  return it->second.handler(parsed.args);
+  return it->second.handler(args);
 }
 
 }  // namespace vrowser
