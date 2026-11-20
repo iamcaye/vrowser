@@ -17,9 +17,10 @@ started.
   whitespace command-line parser. No CEF headers.
 - C++20 library `vrowser_vim` with the mode state machine (Normal, Insert,
   Command, Hint) and `NormalizeKey`, which maps CEF-shaped key events to one
-  `KeyEvent` type. No CEF headers.
+  `KeyEvent` type, and `KeyBindings`, a per-mode table from Vim-notation key
+  sequences to command names. No CEF headers.
 - GoogleTest tests for startup switches, the command registry, mode
-  transitions, and key normalization.
+  transitions, key normalization, and key bindings.
 - clang-format (C++ and Objective-C), clang-tidy config, editorconfig.
 - GitHub Actions workflow that runs the unit tests on Linux, macOS, and
   Windows. Run [44557827020](https://github.com/iamcaye/vrowser/actions/runs/44557827020)
@@ -47,7 +48,7 @@ Clang 21.0.0, Ninja 1.13.2.
 
 | Check | Result |
 | --- | --- |
-| `cmake --preset ci && cmake --build --preset ci && ctest --preset ci` | 44 tests passed |
+| `cmake --preset ci && cmake --build --preset ci && ctest --preset ci` | 56 tests passed |
 | `ctest --test-dir build/debug` | 9 tests passed (older local debug tree) |
 | `cmake --preset debug && cmake --build --preset debug` | Built `Vrowser.app` and five helper bundles |
 | CEF macOS arm64 archive SHA256 | `22a510e5d348a907953278b618e1e9e442ccf78773b9fee0e09eaf154eef53b0` |
@@ -95,11 +96,11 @@ Vim shell. Details in
 
 ## Next unblocked work
 
-Key normalization (#15) is done. The keybinding registry (#16) and then counts
-and multi-key sequences (#17) build on it without a window. Navigation in the
-open window (#12) is the smallest p0. Permission handling should follow
+Key normalization (#15) and the keybinding registry (#16) are done. Counts and
+multi-key sequences (#17) extend the registry without a window. Navigation in
+the open window (#12) is the smallest p0. Permission handling should follow
 Alloy's client-owned prompt path.
 
 ## Recommended next task
 
-[Add the keybinding registry](https://github.com/iamcaye/vrowser/issues/16).
+[Parse counts and multi-key sequences](https://github.com/iamcaye/vrowser/issues/17).
