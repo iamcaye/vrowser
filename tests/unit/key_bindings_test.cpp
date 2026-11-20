@@ -148,5 +148,113 @@ TEST_F(KeyBindingsTest, ResolvesNormalizedKeyEvents) {
             "bottom");
 }
 
+class KeyCountTest : public KeyBindingsTest {
+ protected:
+  void SetUp() override {
+    ASSERT_TRUE(bindings_.Bind(Mode::kNormal, "j", "scroll-down"));
+    ASSERT_TRUE(bindings_.Bind(Mode::kNormal, "gg", "scroll-top"));
+    ASSERT_TRUE(bindings_.Bind(Mode::kNormal, "0", "scroll-left-edge"));
+    ASSERT_TRUE(bindings_.Bind(Mode::kHint, "1", "hint-label-1"));
+  }
+
+  KeyResolution Type(Mode mode, const Keys& keys) {
+    KeyResolution result;
+    for (const std::string& key : keys) {
+      result = bindings_.Resolve(mode, state_, key);
+    }
+    return result;
+  }
+};
+
+TEST_F(KeyCountTest, KeyWithoutCountHasCountOne) {
+  const KeyResolution result = Type(Mode::kNormal, {"j"});
+  EXPECT_EQ(result.status, KeyStatus::kMatched);
+  EXPECT_EQ(result.action.command, "scroll-down");
+  EXPECT_EQ(result.count, 1);
+  EXPECT_FALSE(result.has_count);
+}
+
+TEST_F(KeyCountTest, LeadingDigitsFormCount) {
+  EXPECT_EQ(bindings_.Resolve(Mode::kNormal, state_, "1").status,
+            KeyStatus::kPrefix);
+  EXPECT_EQ(bindings_.Resolve(Mode::kNormal, state_, "2").status,
+            KeyStatus::kPrefix);
+  EXPECT_EQ(state_.count, 12);
+
+  const KeyResolution result = bindings_.Resolve(Mode::kNormal, state_, "j");
+  EXPECT_EQ(result.status, KeyStatus::kMatched);
+  EXPECT_EQ(result.action.command, "scroll-down");
+  EXPECT_EQ(result.count, 12);
+  EXPECT_TRUE(result.has_count);
+  EXPECT_EQ(state_.count, 0);
+  EXPECT_TRUE(state_.keys.empty());
+}
+
+TEST_F(KeyCountTest, ZeroExtendsAStartedCount) {
+  const KeyResolution result = Type(Mode::kNormal, {"1", "0", "j"});
+  EXPECT_EQ(result.action.command, "scroll-down");
+  EXPECT_EQ(result.count, 10);
+}
+
+TEST_F(KeyCountTest, ZeroAsFirstKeyIsACommand) {
+  const KeyResolution result = Type(Mode::kNormal, {"0"});
+  EXPECT_EQ(result.status, KeyStatus::kMatched);
+  EXPECT_EQ(result.action.command, "scroll-left-edge");
+  EXPECT_EQ(result.count, 1);
+  EXPECT_FALSE(result.has_count);
+}
+
+TEST_F(KeyCountTest, MultiKeySequenceIsPrefixThenResolves) {
+  KeyResolution result = bindings_.Resolve(Mode::kNormal, state_, "g");
+  EXPECT_EQ(result.status, KeyStatus::kPrefix);
+  EXPECT_EQ(state_.keys, Keys{"g"});
+
+  result = bindings_.Resolve(Mode::kNormal, state_, "g");
+  EXPECT_EQ(result.status, KeyStatus::kMatched);
+  EXPECT_EQ(result.action.command, "scroll-top");
+  EXPECT_EQ(result.count, 1);
+}
+
+TEST_F(KeyCountTest, CountAppliesToMultiKeySequence) {
+  EXPECT_EQ(Type(Mode::kNormal, {"5", "g"}).status, KeyStatus::kPrefix);
+  const KeyResolution result = bindings_.Resolve(Mode::kNormal, state_, "g");
+  EXPECT_EQ(result.action.command, "scroll-top");
+  EXPECT_EQ(result.count, 5);
+  EXPECT_TRUE(result.has_count);
+}
+
+TEST_F(KeyCountTest, DigitInsideSequenceIsAnOrdinaryKey) {
+  // `g` started a sequence, so `3` is looked up as a key and does not match.
+  const KeyResolution result = Type(Mode::kNormal, {"g", "3"});
+  EXPECT_EQ(result.status, KeyStatus::kNoMatch);
+  EXPECT_TRUE(state_.keys.empty());
+}
+
+TEST_F(KeyCountTest, UnknownKeyClearsCount) {
+  const KeyResolution result = Type(Mode::kNormal, {"4", "x"});
+  EXPECT_EQ(result.status, KeyStatus::kNoMatch);
+  EXPECT_EQ(state_.count, 0);
+  EXPECT_EQ(Type(Mode::kNormal, {"j"}).count, 1);
+}
+
+TEST_F(KeyCountTest, CountSaturates) {
+  const KeyResolution result =
+      Type(Mode::kNormal, {"9", "9", "9", "9", "9", "9", "9", "j"});
+  EXPECT_EQ(result.count, kMaxCount);
+}
+
+TEST_F(KeyCountTest, OtherModesDoNotTakeCounts) {
+  const KeyResolution result = Type(Mode::kHint, {"1"});
+  EXPECT_EQ(result.status, KeyStatus::kMatched);
+  EXPECT_EQ(result.action.command, "hint-label-1");
+  EXPECT_FALSE(result.has_count);
+}
+
+TEST_F(KeyCountTest, NormalBindingsCannotStartWithCountDigit) {
+  EXPECT_FALSE(bindings_.Bind(Mode::kNormal, "5", "five"));
+  EXPECT_FALSE(bindings_.Bind(Mode::kNormal, "2x", "two-x"));
+  EXPECT_TRUE(bindings_.Bind(Mode::kNormal, "g5", "g-five"));
+}
+
 }  // namespace
 }  // namespace vrowser
