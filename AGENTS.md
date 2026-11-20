@@ -89,6 +89,11 @@ Requirements: CMake 3.24+, a C++20 compiler, Ninja, and network access the
 first time GoogleTest or CEF is fetched. macOS builds of the pinned CEF need
 the Xcode listed for that branch (Xcode 27 for CEF 156).
 
+[`just`](https://github.com/casey/just) wraps the commands below. Run `just`
+to list recipes. `just test` runs the unit tests, `just run [url]` builds and
+launches the macOS app with a profile in `build/dev-profile`, and `just smoke`
+runs the smoke check. The raw CMake commands still work without `just`.
+
 ```bash
 cmake --preset ci
 cmake --build --preset ci
