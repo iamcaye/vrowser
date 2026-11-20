@@ -25,6 +25,7 @@ option(VROWSER_WITH_CEF "Download CEF and build the desktop shell" ON)
 option(VROWSER_BUILD_TESTS "Build GoogleTest unit tests" ON)
 
 add_subdirectory(src/core)
+add_subdirectory(src/commands)
 add_subdirectory(src/vim)
 
 if(VROWSER_BUILD_TESTS)
