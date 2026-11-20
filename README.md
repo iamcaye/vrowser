@@ -20,6 +20,11 @@ build for this tree is 156.0.30 (Chromium 156.0.8078.96). On macOS that build
 expects Xcode 27. The first configure downloads CEF into `third_party/cef/`
 and checks the SHA256 in `cmake/cef_version.cmake`.
 
+[`just`](https://github.com/casey/just) wraps the commands below. Run `just`
+to list recipes. `just test` runs the unit tests, `just run [url]` builds and
+launches the macOS app with a profile in `build/dev-profile`, and `just smoke`
+runs the smoke check. The raw CMake commands still work without `just`.
+
 Unit tests do not need CEF:
 
 ```bash
