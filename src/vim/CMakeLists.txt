@@ -1,4 +1,7 @@
-add_library(vrowser_vim STATIC mode_machine.cpp)
+add_library(vrowser_vim STATIC
+  key_bindings.cpp
+  key_event.cpp
+  mode_machine.cpp)
 target_include_directories(vrowser_vim PUBLIC
   "${PROJECT_SOURCE_DIR}/include")
 target_compile_features(vrowser_vim PUBLIC cxx_std_20)
