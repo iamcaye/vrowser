@@ -76,6 +76,10 @@ bool IsAsciiDigit(std::string_view key) {
   return key.size() == 1 && key[0] >= '0' && key[0] <= '9';
 }
 
+bool StartsCount(std::string_view key) {
+  return IsAsciiDigit(key) && key[0] != '0';
+}
+
 }  // namespace
 
 std::string KeyNotation(const KeyEvent& event) {
@@ -151,6 +155,9 @@ bool KeyBindings::Bind(Mode mode,
   if (keys.empty() || command.empty()) {
     return false;
   }
+  if (mode == Mode::kNormal && StartsCount(keys.front())) {
+    return false;
+  }
   Table& table = tables_[mode];
 
   // An existing binding that equals or extends `keys`.
@@ -173,22 +180,34 @@ bool KeyBindings::Bind(Mode mode,
 KeyResolution KeyBindings::Resolve(Mode mode,
                                    KeySequenceState& state,
                                    std::string key) const {
+  const bool counting = mode == Mode::kNormal && state.keys.empty();
+  if (counting && IsAsciiDigit(key) && (state.count > 0 || StartsCount(key))) {
+    state.count = std::min(kMaxCount, state.count * 10 + (key[0] - '0'));
+    return KeyResolution{KeyStatus::kPrefix, {}, state.count, true};
+  }
+
   state.keys.push_back(std::move(key));
 
   const auto table = tables_.find(mode);
   if (table != tables_.end()) {
     const auto it = table->second.lower_bound(state.keys);
     if (it != table->second.end() && it->first == state.keys) {
-      state.keys.clear();
-      return KeyResolution{KeyStatus::kMatched, it->second};
+      KeyResolution result{KeyStatus::kMatched, it->second, 1, false};
+      if (state.count > 0) {
+        result.count = state.count;
+        result.has_count = true;
+      }
+      state = KeySequenceState{};
+      return result;
     }
     if (it != table->second.end() && HasPrefix(it->first, state.keys)) {
-      return KeyResolution{KeyStatus::kPrefix, {}};
+      return KeyResolution{
+          KeyStatus::kPrefix, {}, std::max(1, state.count), state.count > 0};
     }
   }
 
-  state.keys.clear();
-  return KeyResolution{KeyStatus::kNoMatch, {}};
+  state = KeySequenceState{};
+  return KeyResolution{KeyStatus::kNoMatch, {}, 1, false};
 }
 
 }  // namespace vrowser
