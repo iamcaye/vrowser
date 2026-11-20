@@ -10,7 +10,8 @@ FetchContent_MakeAvailable(googletest)
 add_executable(vrowser_unit_tests
   unit/startup_config_test.cpp
   unit/command_registry_test.cpp
-  unit/mode_machine_test.cpp)
+  unit/mode_machine_test.cpp
+  unit/navigation_test.cpp)
 target_link_libraries(vrowser_unit_tests PRIVATE
   vrowser_core
   vrowser_commands

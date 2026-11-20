@@ -54,7 +54,10 @@ in [runtime-style.md](runtime-style.md).
 Each profile is a directory passed to `CefSettings.root_cache_path`. CEF locks
 that directory so a second launch is delivered to the running process through
 `OnAlreadyRunningAppRelaunch`. The prototype shows the existing window and, when
-the new launch passed `--url`, loads that URL.
+the new launch passed `--url`, records that URL in the core
+`NavigationController`. The CEF client listens to the controller and calls
+`LoadURL` on the UI thread. Later commands use the same controller, so they
+navigate without including CEF.
 
 Page content, renderers, and GPU run in CEF's helper processes. On macOS those
 helpers are separate app bundles inside `Vrowser.app`. On Linux and Windows the

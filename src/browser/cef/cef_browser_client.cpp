@@ -34,6 +34,9 @@ CefBrowserClient::CefBrowserClient(bool alloy_style, bool smoke_test)
       exit_code_(smoke_test ? 2 : 0) {
   DCHECK(g_instance == nullptr);
   g_instance = this;
+  // The controller is a member, so the listener cannot outlive `this`.
+  navigation_.SetListener(
+      [this](const std::string& url) { LoadInMainFrame(url); });
 }
 
 CefBrowserClient::~CefBrowserClient() {
@@ -187,9 +190,27 @@ void CefBrowserClient::HandleRelaunch(const std::string& url) {
     return;
   }
   ShowMainWindow();
-  if (url.empty() || browsers_.empty()) {
+  if (!url.empty()) {
+    Navigate(url);
+  }
+}
+
+void CefBrowserClient::Navigate(const std::string& url) {
+  if (!CefCurrentlyOn(TID_UI)) {
+    CefPostTask(TID_UI, base::BindOnce(&CefBrowserClient::Navigate, this, url));
     return;
   }
+  if (!navigation_.Request(url)) {
+    std::fprintf(stderr, "vrowser: navigation rejected\n");
+  }
+}
+
+void CefBrowserClient::LoadInMainFrame(const std::string& url) {
+  CEF_REQUIRE_UI_THREAD();
+  if (browsers_.empty()) {
+    return;
+  }
+  std::fprintf(stderr, "vrowser: navigate %s\n", url.c_str());
   browsers_.front()->GetMainFrame()->LoadURL(url);
 }
 

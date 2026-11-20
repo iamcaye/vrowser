@@ -12,13 +12,15 @@ started.
 
 - CMake presets `ci`, `debug`, and `release`. `ci` builds unit tests without
   downloading CEF.
-- C++20 library `vrowser_core` with startup-switch parsing.
+- C++20 library `vrowser_core` with startup-switch parsing and a
+  `NavigationController` the CEF client loads from on the UI thread.
 - C++20 library `vrowser_commands` with a command registry and a
   whitespace command-line parser. No CEF headers.
 - C++20 library `vrowser_vim` with the mode state machine (Normal, Insert,
   Command, Hint). No CEF headers.
-- GoogleTest tests for startup switches, the command registry, and mode
-  transitions.
+- GoogleTest tests for startup switches, the command registry, mode
+  transitions, and navigation requests.
+- A second launch with `--url` loads that URL in the running window.
 - clang-format (C++ and Objective-C), clang-tidy config, editorconfig.
 - GitHub Actions workflow that runs the unit tests on Linux, macOS, and
   Windows. Run [44557827020](https://github.com/iamcaye/vrowser/actions/runs/44557827020)
@@ -46,11 +48,12 @@ Clang 21.0.0, Ninja 1.13.2.
 
 | Check | Result |
 | --- | --- |
-| `cmake --preset ci && cmake --build --preset ci && ctest --preset ci` | 32 tests passed |
+| `cmake --preset ci && cmake --build --preset ci && ctest --preset ci` | 38 tests passed |
 | `ctest --test-dir build/debug` | 9 tests passed (older local debug tree) |
 | `cmake --preset debug && cmake --build --preset debug` | Built `Vrowser.app` and five helper bundles |
 | CEF macOS arm64 archive SHA256 | `22a510e5d348a907953278b618e1e9e442ccf78773b9fee0e09eaf154eef53b0` |
 | Smoke test, sandbox left on | `https://example.com` main frame HTTP 200, process exit 0 |
+| Relaunch with `--url=https://www.iana.org/help/example-domains` into a running app | `vrowser: load-end 200 https://www.iana.org/help/example-domains` in the first process |
 | Chrome-style smoke (`--vrowser-smoke-test`) | exit 0, `vrowser-smoke: ok 200` |
 | Alloy-style smoke (`--use-alloy-style --vrowser-smoke-test`) | exit 0, `vrowser-smoke: ok 200` |
 | `https://expired.badssl.com/` Chrome style | Chromium keeps the error UI; no client data URL |
@@ -94,13 +97,11 @@ Vim shell. Details in
 
 ## Next unblocked work
 
-The Vim mode machine (#14) and the command registry (#20) are done. Key
-normalization (#15) is now unblocked but needs the `agent-ready` label, as does
-navigation in the open window (#12). Permission handling should follow Alloy's
-client-owned prompt path.
+Navigation in the open window (#12) is done, which unblocks tabs (#13). The
+pure Vim input issues (#15, #16, #17) are in review. Permission handling should
+follow Alloy's client-owned prompt path.
 
 ## Recommended next task
 
-Label the next issue `agent-ready`. [Normalize keyboard events](https://github.com/iamcaye/vrowser/issues/15)
-builds on the mode machine without a window. [Navigate the already open window](https://github.com/iamcaye/vrowser/issues/12)
-(`priority:p0`) is the smallest p0 candidate.
+[Create and close tabs](https://github.com/iamcaye/vrowser/issues/13)
+(`priority:p0`).

@@ -7,6 +7,7 @@
 #include <string>
 
 #include "include/cef_client.h"
+#include "vrowser/core/navigation.hpp"
 
 namespace vrowser {
 
@@ -46,6 +47,9 @@ class CefBrowserClient : public CefClient,
   void ShowMainWindow();
   void CloseAllBrowsers(bool force_close);
   void HandleRelaunch(const std::string& url);
+  // Loads `url` in the open window. Safe to call from any thread; the request
+  // is recorded and loaded on the UI thread.
+  void Navigate(const std::string& url);
   bool IsClosing() const { return is_closing_; }
   int exit_code() const { return exit_code_; }
 
@@ -53,6 +57,7 @@ class CefBrowserClient : public CefClient,
   void PlatformTitleChange(CefRefPtr<CefBrowser> browser,
                            const CefString& title);
   void PlatformShowWindow(CefRefPtr<CefBrowser> browser);
+  void LoadInMainFrame(const std::string& url);
   void OnSmokeTimeout();
   void FinishSmoke(int code);
 
@@ -65,6 +70,8 @@ class CefBrowserClient : public CefClient,
   using BrowserList = std::list<CefRefPtr<CefBrowser>>;
   BrowserList browsers_;
   bool is_closing_ = false;
+  // UI thread only. Its listener calls LoadInMainFrame.
+  NavigationController navigation_;
 
   IMPLEMENT_REFCOUNTING(CefBrowserClient);
 };
