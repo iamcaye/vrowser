@@ -1,6 +1,4 @@
-# Vim engine
+# vim
 
-Not implemented. The design is `docs/architecture/input-system.md`.
-
-This module will own modes, normalized keys, counts, and multi-key sequences.
-It must be unit-tested without CEF.
+Mode state and, later, key sequence parsing. This module must not include CEF
+headers. The first piece is `ModeMachine` in `mode_machine.cpp`.

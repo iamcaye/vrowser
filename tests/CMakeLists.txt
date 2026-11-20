@@ -8,9 +8,11 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(googletest)
 
 add_executable(vrowser_unit_tests
-  unit/startup_config_test.cpp)
+  unit/startup_config_test.cpp
+  unit/mode_machine_test.cpp)
 target_link_libraries(vrowser_unit_tests PRIVATE
   vrowser_core
+  vrowser_vim
   GTest::gtest_main)
 target_compile_features(vrowser_unit_tests PRIVATE cxx_std_20)
 
