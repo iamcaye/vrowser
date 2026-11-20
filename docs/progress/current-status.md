@@ -13,7 +13,9 @@ started.
 - CMake presets `ci`, `debug`, and `release`. `ci` builds unit tests without
   downloading CEF.
 - C++20 library `vrowser_core` with startup-switch parsing.
-- GoogleTest tests for those switches.
+- C++20 library `vrowser_commands` with a command registry and a
+  whitespace command-line parser. No CEF headers.
+- GoogleTest tests for startup switches and the command registry.
 - clang-format (C++ and Objective-C), clang-tidy config, editorconfig.
 - GitHub Actions workflow that runs the unit tests on Linux, macOS, and
   Windows. Run [44557827020](https://github.com/iamcaye/vrowser/actions/runs/44557827020)
@@ -41,8 +43,8 @@ Clang 21.0.0, Ninja 1.13.2.
 
 | Check | Result |
 | --- | --- |
-| `cmake --preset ci && cmake --build --preset ci && ctest --preset ci` | 9 tests passed |
-| `ctest --test-dir build/debug` | 9 tests passed |
+| `cmake --preset ci && cmake --build --preset ci && ctest --preset ci` | 20 tests passed |
+| `ctest --test-dir build/debug` | 9 tests passed (pre-command-registry local debug tree) |
 | `cmake --preset debug && cmake --build --preset debug` | Built `Vrowser.app` and five helper bundles |
 | CEF macOS arm64 archive SHA256 | `22a510e5d348a907953278b618e1e9e442ccf78773b9fee0e09eaf154eef53b0` |
 | Smoke test, sandbox left on | `https://example.com` main frame HTTP 200, process exit 0 |
@@ -89,11 +91,11 @@ Vim shell. Details in
 
 ## Next unblocked work
 
-The Vim mode machine (#14) and the command registry (#20) are unblocked.
-Navigation in the open window (#12) still needs the `agent-ready` label.
+The Vim mode machine (#14) is in review. No other open issue carries the
+`agent-ready` label. Navigation in the open window (#12) still needs it.
 Permission handling should follow Alloy's client-owned prompt path.
 
 ## Recommended next task
 
-[Add the Vim mode state machine](https://github.com/iamcaye/vrowser/issues/14)
-(`agent-ready`, `priority:p1`) or [Add the command registry and parser](https://github.com/iamcaye/vrowser/issues/20).
+Label the next issue `agent-ready`. [Navigate the already open window](https://github.com/iamcaye/vrowser/issues/12)
+(`priority:p0`) is the smallest p0 candidate.
