@@ -19,8 +19,12 @@ started.
 - C++20 library `vrowser_vim` with the mode state machine (Normal, Insert,
   Command, Hint). No CEF headers.
 - GoogleTest tests for startup switches, the command registry, mode
-  transitions, and navigation requests.
+  transitions, navigation requests, and the tab list.
 - A second launch with `--url` loads that URL in the running window.
+- Core `TabList` and tabs in the main window (Alloy style only): each tab is a
+  browser view under a fill layout, only the active one is visible, closing a
+  tab removes its view, and closing the last tab quits. No tab strip or keys
+  yet.
 - clang-format (C++ and Objective-C), clang-tidy config, editorconfig.
 - GitHub Actions workflow that runs the unit tests on Linux, macOS, and
   Windows. Run [44557827020](https://github.com/iamcaye/vrowser/actions/runs/44557827020)
@@ -48,12 +52,14 @@ Clang 21.0.0, Ninja 1.13.2.
 
 | Check | Result |
 | --- | --- |
-| `cmake --preset ci && cmake --build --preset ci && ctest --preset ci` | 38 tests passed |
+| `cmake --preset ci && cmake --build --preset ci && ctest --preset ci` | 47 tests passed |
 | `ctest --test-dir build/debug` | 9 tests passed (older local debug tree) |
 | `cmake --preset debug && cmake --build --preset debug` | Built `Vrowser.app` and five helper bundles |
 | CEF macOS arm64 archive SHA256 | `22a510e5d348a907953278b618e1e9e442ccf78773b9fee0e09eaf154eef53b0` |
 | Smoke test, sandbox left on | `https://example.com` main frame HTTP 200, process exit 0 |
 | Relaunch with `--url=https://www.iana.org/help/example-domains` into a running app | `vrowser: load-end 200 https://www.iana.org/help/example-domains` in the first process |
+| `just tab-smoke` (`--vrowser-tab-smoke-test --use-alloy-style`) | two tabs loaded, first closed, `vrowser-smoke: tabs ok, 1 open, remaining visible`, exit 0 |
+| `--vrowser-tab-smoke-test` in Chrome style | `vrowser: tabs need --use-alloy-style`, exit 1 (second Chrome-style browser view is never created) |
 | Chrome-style smoke (`--vrowser-smoke-test`) | exit 0, `vrowser-smoke: ok 200` |
 | Alloy-style smoke (`--use-alloy-style --vrowser-smoke-test`) | exit 0, `vrowser-smoke: ok 200` |
 | `https://expired.badssl.com/` Chrome style | Chromium keeps the error UI; no client data URL |
@@ -97,11 +103,12 @@ Vim shell. Details in
 
 ## Next unblocked work
 
-Navigation in the open window (#12) is done, which unblocks tabs (#13). The
-pure Vim input issues (#15, #16, #17) are in review. Permission handling should
-follow Alloy's client-owned prompt path.
+Tabs (#13) are in place for Alloy style. Normal and Insert in the window (#18)
+needs them plus counts and sequences (#17, in review). Keyboard tab switching
+(#32) follows. Chrome style still hosts one browser per window. Permission
+handling should follow Alloy's client-owned prompt path.
 
 ## Recommended next task
 
-[Create and close tabs](https://github.com/iamcaye/vrowser/issues/13)
-(`priority:p0`).
+[Implement Normal and Insert modes in the window](https://github.com/iamcaye/vrowser/issues/18)
+(`priority:p0`) once #46, #47, and #48 are merged.

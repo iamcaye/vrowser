@@ -60,6 +60,13 @@ TEST(StartupConfigTest, EnablesSmokeTest) {
   EXPECT_TRUE(config.smoke_test);
 }
 
+TEST(StartupConfigTest, TabSmokeTestImpliesSmokeTest) {
+  const StartupConfig config = Parse({"--vrowser-tab-smoke-test"});
+  EXPECT_TRUE(config.tab_smoke_test);
+  EXPECT_TRUE(config.smoke_test);
+  EXPECT_FALSE(Parse({"--vrowser-smoke-test"}).tab_smoke_test);
+}
+
 TEST(StartupConfigTest, IgnoresCefSubprocessSwitches) {
   const StartupConfig config =
       Parse({"--type=renderer", "--lang=en-US", "--url=https://example.org"});

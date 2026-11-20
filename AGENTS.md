@@ -142,6 +142,8 @@ Switches:
 - `--use-alloy-style` Alloy window instead of the default Chrome style.
 - `--use-native` platform window instead of Views.
 - `--vrowser-smoke-test` quit after the main frame load.
+- `--vrowser-tab-smoke-test` open a second tab, close the first, and quit.
+  Needs `--use-alloy-style`. `just tab-smoke` runs it.
 
 Format:
 

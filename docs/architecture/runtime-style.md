@@ -52,6 +52,7 @@ processes` / GPU shared-image errors. Neither blocked exit 0.
 | Windowless rendering | Unavailable | Required style for off-screen rendering |
 | Extensions / Chrome commands | Chrome-style APIs (`CefCommandHandler`, Chrome toolbar view) | Not available |
 | Vim command line / status bar | Fights Chromium's toolbar layout | Fits a client-drawn shell |
+| Several browser views in one window (tabs) | Second browser view is never created (observed, macOS) | Works; `--vrowser-tab-smoke-test` passes |
 
 ### Observed certificate path
 
