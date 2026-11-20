@@ -17,9 +17,13 @@ started.
 - C++20 library `vrowser_commands` with a command registry and a
   whitespace command-line parser. No CEF headers.
 - C++20 library `vrowser_vim` with the mode state machine (Normal, Insert,
-  Command, Hint). No CEF headers.
+  Command, Hint) and `NormalizeKey`, which maps CEF-shaped key events to one
+  `KeyEvent` type, and `KeyBindings`, a per-mode table from Vim-notation key
+  sequences to command names, with Normal-mode counts (`12j`, `5gg`). No CEF
+  headers.
 - GoogleTest tests for startup switches, the command registry, mode
-  transitions, navigation requests, and the tab list.
+  transitions, key normalization, key bindings, counts, navigation
+  requests, and the tab list.
 - A second launch with `--url` loads that URL in the running window.
 - Core `TabList` and tabs in the main window (Alloy style only): each tab is a
   browser view under a fill layout, only the active one is visible, closing a
@@ -52,7 +56,7 @@ Clang 21.0.0, Ninja 1.13.2.
 
 | Check | Result |
 | --- | --- |
-| `cmake --preset ci && cmake --build --preset ci && ctest --preset ci` | 47 tests passed |
+| `cmake --preset ci && cmake --build --preset ci && ctest --preset ci` | 82 tests passed |
 | `ctest --test-dir build/debug` | 9 tests passed (older local debug tree) |
 | `cmake --preset debug && cmake --build --preset debug` | Built `Vrowser.app` and five helper bundles |
 | CEF macOS arm64 archive SHA256 | `22a510e5d348a907953278b618e1e9e442ccf78773b9fee0e09eaf154eef53b0` |
@@ -103,12 +107,13 @@ Vim shell. Details in
 
 ## Next unblocked work
 
-Tabs (#13) are in place for Alloy style. Normal and Insert in the window (#18)
-needs them plus counts and sequences (#17, in review). Keyboard tab switching
-(#32) follows. Chrome style still hosts one browser per window. Permission
-handling should follow Alloy's client-owned prompt path.
+The pure Vim input layer (#14, #15, #16, #17), navigation in the open window
+(#12), and tabs for Alloy style (#13) are in place. Normal and Insert in the
+window (#18) is unblocked. Keyboard tab switching (#32) follows. Chrome style
+still hosts one browser per window. Permission handling should follow Alloy's
+client-owned prompt path.
 
 ## Recommended next task
 
 [Implement Normal and Insert modes in the window](https://github.com/iamcaye/vrowser/issues/18)
-(`priority:p0`) once #46, #47, and #48 are merged.
+(`priority:p0`).
