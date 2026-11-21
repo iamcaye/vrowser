@@ -69,8 +69,14 @@ bool IsPrintable(char32_t c) {
 }  // namespace
 
 std::optional<KeyEvent> NormalizeKey(const RawKeyInput& input) {
+  // A character event has no key identity of its own. The dispatcher decides
+  // whether to consume it from the key-down that came before it.
   if (input.type == RawKeyType::kChar) {
-    return std::nullopt;
+    KeyEvent event;
+    event.character = IsPrintable(input.character) ? input.character : 0;
+    event.key_down = false;
+    event.character_only = true;
+    return event;
   }
   std::optional<std::string> key = KeyIdentity(input.windows_key_code);
   if (!key) {
@@ -85,6 +91,7 @@ std::optional<KeyEvent> NormalizeKey(const RawKeyInput& input) {
   event.modifiers.meta = (input.modifiers & kRawModifierMeta) != 0;
   event.modifiers.shift = (input.modifiers & kRawModifierShift) != 0;
   event.key_down = input.type != RawKeyType::kKeyUp;
+  event.repeat = (input.modifiers & kRawModifierRepeat) != 0;
   return event;
 }
 

@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "browser/cef/cef_renderer_app.hpp"
 #include "browser/cef/cef_runtime_app.hpp"
 #include "include/cef_app.h"
 #include "include/cef_sandbox_win.h"
@@ -22,7 +23,9 @@ namespace {
 
 int RunMain(HINSTANCE instance, void* sandbox_info) {
   CefMainArgs main_args(instance);
-  const int subprocess = CefExecuteProcess(main_args, nullptr, sandbox_info);
+  CefRefPtr<CefApp> subprocess_app(new vrowser::CefRendererApp());
+  const int subprocess =
+      CefExecuteProcess(main_args, subprocess_app, sandbox_info);
   if (subprocess >= 0) {
     return subprocess;
   }

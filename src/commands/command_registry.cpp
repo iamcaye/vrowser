@@ -85,11 +85,30 @@ CommandResult CommandRegistry::Execute(std::string_view line) const {
   if (parsed.name.empty()) {
     return CommandResult::Error("Empty command");
   }
-  const auto it = commands_.find(parsed.name);
+  return Run(parsed.name, parsed.args);
+}
+
+CommandResult CommandRegistry::Run(std::string_view name,
+                                   const std::vector<std::string>& args,
+                                   int count,
+                                   bool has_count) const {
+  const auto it = commands_.find(name);
   if (it == commands_.end()) {
-    return CommandResult::Error("Unknown command: " + parsed.name);
+    return CommandResult::Error("Unknown command: " + std::string(name));
   }
-  return it->second.handler(parsed.args);
+  // A typed count repeats the command. No count, or a count of 1, runs once.
+  int times = 1;
+  if (has_count && count > 1) {
+    times = count;
+  }
+  CommandResult result = CommandResult::Ok();
+  for (int i = 0; i < times; ++i) {
+    result = it->second.handler(args);
+    if (!result.ok()) {
+      return result;
+    }
+  }
+  return result;
 }
 
 }  // namespace vrowser

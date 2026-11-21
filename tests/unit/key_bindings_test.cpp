@@ -27,7 +27,9 @@ TEST(KeyNotationTest, PrintableCharacters) {
   EXPECT_EQ(KeyNotation(Key("j", U'j')), "j");
   EXPECT_EQ(KeyNotation(Key("g", U'G', {.shift = true})), "G");
   EXPECT_EQ(KeyNotation(Key("1", U'!', {.shift = true})), "!");
-  EXPECT_EQ(KeyNotation(Key("e", U'é')), "\xC3\xA9");
+  // U+00E9 (e with acute) is written as a number: MSVC reads source files
+  // in the system code page.
+  EXPECT_EQ(KeyNotation(Key("e", char32_t{0xE9})), "\xC3\xA9");
 }
 
 TEST(KeyNotationTest, LettersWithoutCharacterUseKeyIdentity) {

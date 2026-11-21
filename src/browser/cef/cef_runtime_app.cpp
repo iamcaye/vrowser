@@ -58,10 +58,7 @@ bool ConfigureCefSettings(CefSettings& settings, const StartupConfig& config) {
 }
 
 CefRuntimeApp::CefRuntimeApp(StartupConfig config)
-    : config_(std::move(config)),
-      client_(new CefBrowserClient(config_.alloy_style,
-                                   config_.smoke_test,
-                                   config_.tab_smoke_test)) {}
+    : config_(std::move(config)), client_(new CefBrowserClient(config_)) {}
 
 void CefRuntimeApp::OnContextInitialized() {
   CEF_REQUIRE_UI_THREAD();
@@ -69,6 +66,9 @@ void CefRuntimeApp::OnContextInitialized() {
   const cef_runtime_style_t runtime_style =
       config_.alloy_style ? CEF_RUNTIME_STYLE_ALLOY : CEF_RUNTIME_STYLE_DEFAULT;
   CefBrowserSettings browser_settings;
+  if (config_.key_smoke_test) {
+    config_.initial_url = CefBrowserClient::KeySmokePageUrl();
+  }
   std::fprintf(stderr, "vrowser: opening %s\n", config_.initial_url.c_str());
 
   if (config_.use_views) {

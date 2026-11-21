@@ -82,5 +82,12 @@ TEST(StartupConfigTest, ArgvSkipsTheProgramName) {
   EXPECT_EQ(config.initial_url, "https://example.org");
 }
 
+TEST(StartupConfigTest, KeySmokeTestImpliesSmokeTest) {
+  const StartupConfig config = Parse({"--vrowser-key-smoke-test"});
+  EXPECT_TRUE(config.key_smoke_test);
+  EXPECT_TRUE(config.smoke_test);
+  EXPECT_FALSE(config.tab_smoke_test);
+}
+
 }  // namespace
 }  // namespace vrowser

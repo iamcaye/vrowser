@@ -24,6 +24,10 @@ struct StartupConfig {
   // Like smoke_test, but opens the URL in a second tab, closes the first tab,
   // checks the second is still shown, and quits. Implies smoke_test.
   bool tab_smoke_test{false};
+  // Like smoke_test, but loads a built-in test page, sends keys, checks that
+  // Normal-mode bindings are consumed and Insert mode follows a focused text
+  // field, and quits. Implies smoke_test.
+  bool key_smoke_test{false};
 };
 
 // Platform directory for profiles, cache, and logs.

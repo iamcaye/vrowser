@@ -33,4 +33,29 @@ void CefBrowserClient::PlatformShowWindow(CefRefPtr<CefBrowser> browser) {
   [window makeKeyAndOrderFront:nil];
 }
 
+void CefBrowserClient::PlatformSendTestKey(CefRefPtr<CefBrowser> browser,
+                                           int mac_key_code,
+                                           char16_t character) {
+  NSWindow* window = WindowForBrowser(browser);
+  if (window == nil) {
+    return;
+  }
+  const unichar unit = character;
+  NSString* characters = [NSString stringWithCharacters:&unit length:1];
+  for (const NSEventType type : {NSEventTypeKeyDown, NSEventTypeKeyUp}) {
+    NSEvent* event = [NSEvent
+                   keyEventWithType:type
+                           location:NSZeroPoint
+                      modifierFlags:0
+                          timestamp:[[NSProcessInfo processInfo] systemUptime]
+                       windowNumber:[window windowNumber]
+                            context:nil
+                         characters:characters
+        charactersIgnoringModifiers:characters
+                          isARepeat:NO
+                            keyCode:static_cast<unsigned short>(mac_key_code)];
+    [window sendEvent:event];
+  }
+}
+
 }  // namespace vrowser
