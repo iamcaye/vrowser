@@ -73,9 +73,12 @@ class CommandRegistry {
   CommandResult Execute(std::string_view line) const;
 
   // Runs a command by name, as a key binding does. Unknown names return an
-  // error result.
+  // error result. When `has_count` is set and `count` is greater than 1, the
+  // handler runs that many times (a Normal-mode count such as `3r`).
   CommandResult Run(std::string_view name,
-                    const std::vector<std::string>& args) const;
+                    const std::vector<std::string>& args,
+                    int count = 1,
+                    bool has_count = false) const;
 
  private:
   struct Entry {

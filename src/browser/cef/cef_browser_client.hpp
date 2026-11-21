@@ -109,6 +109,7 @@ class CefBrowserClient : public CefClient,
   void SendTestKey(CefRefPtr<CefBrowser> browser,
                    int windows_key_code,
                    int mac_key_code,
+                   int linux_key_code,
                    char16_t character);
   void RunBinding(const KeyDispatch& dispatch);
   void OnSmokeTimeout();

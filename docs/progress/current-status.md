@@ -1,6 +1,6 @@
 # Current status
 
-Updated: 2026-11-19
+Updated: 2026-11-21
 
 ## Milestone
 
@@ -31,7 +31,10 @@ started.
   yet.
 - Normal and Insert modes in the window: Normal-mode bindings are consumed
   before the page sees them, a focused text field switches the tab to Insert,
-  and Escape returns to Normal. One binding so far: `r` reloads.
+  and Escape returns to Normal. One binding so far: `r` reloads. A count
+  repeats the command (`3r` reloads three times). OS key repeat does not.
+  A main-frame load drops consumed key-up tracking, and editable focus clears
+  a pending key sequence.
 - clang-format (C++ and Objective-C), clang-tidy config, editorconfig.
 - GitHub Actions workflow that runs the unit tests on Linux, macOS, and
   Windows. Run [44557827020](https://github.com/iamcaye/vrowser/actions/runs/44557827020)
@@ -82,8 +85,19 @@ Clang 21.0.0, Ninja 1.13.2.
 The passing smoke command was `tools/smoke_test.sh` after the macOS keychain
 permission was available. It did not pass `--use-mock-keychain`.
 
-Linux and Windows CEF CI workflows are on `main`. Graphical smoke was not run
-on either host.
+Linux and Windows CEF CI workflows are on `main`.
+
+Linux desktop (Ubuntu 24.04, x86_64, Clang 18, CEF 156 linux64, sandbox on),
+checked on this branch after the key-dispatch fixes:
+
+| Check | Result |
+| --- | --- |
+| `just test` | 107 tests passed |
+| `just smoke` | exit 0, `vrowser-smoke: ok 200 https://example.com/` |
+| `just tab-smoke` | exit 0, `vrowser-smoke: tabs ok, 1 open, remaining visible` |
+| `just key-smoke` | exit 0, `vrowser-smoke: keys ok` (Chrome style, synthesized keys) |
+| Real X11 keys, Chrome style and `--use-alloy-style` | `r` reloads and stays out of the page, `x` reaches the page, a focused field types `r` including keyup, Escape does not reach the page, the next `r` reloads |
+| Held `r` in Normal mode for half a second | one `vrowser: command reload` |
 
 ## Known limitations
 

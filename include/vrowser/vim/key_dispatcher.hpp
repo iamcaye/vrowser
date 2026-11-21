@@ -13,12 +13,27 @@
 
 namespace vrowser {
 
+// One consumed key-down, including the modifiers held when it went down.
+struct ConsumedPress {
+  std::string key;
+  Modifiers modifiers;
+
+  bool operator==(const ConsumedPress&) const = default;
+};
+
 // Keyboard state for one tab.
 struct KeyInputState {
   ModeMachine mode;
   KeySequenceState sequence;
-  // Keys whose key-down was consumed, so their key-up is consumed too.
-  std::vector<std::string> consumed_keys;
+  // Presses whose key-down was consumed. The matching key-up is consumed too.
+  // A key-up matches when the key is the same and its modifiers are a subset
+  // of the key-down's (a platform may release Shift before the key-up). A
+  // key-up that adds a modifier the key-down did not have does not match, so
+  // a stale plain "r" cannot swallow Shift+R.
+  std::vector<ConsumedPress> consumed_keys;
+  // Set while the most recent key-down was consumed, until its key-up. The
+  // character events that follow that key-down are consumed too.
+  bool suppress_chars{false};
 };
 
 enum class KeyDisposition {
@@ -42,8 +57,26 @@ struct KeyDispatch {
 // Insert: keys go to the page, except Escape, which returns to Normal and is
 // consumed. Command and Hint have no UI yet: Escape returns to Normal, other
 // keys are forwarded.
+//
+// OS key repeat does not run a binding again. A repeat of a consumed press is
+// consumed and ignored. A repeat of a forwarded key is forwarded, so typing
+// still repeats. A non-repeat key-down of a press that is still marked
+// consumed means the key-up was lost; that stale press is dropped before the
+// new key-down is handled.
+//
+// A character-only event never starts a binding. It is consumed when the
+// key-down it follows was consumed, so a Windows KEYEVENT_CHAR cannot leak
+// after a consumed raw key-down.
 KeyDispatch DispatchKey(const KeyBindings& bindings,
                         KeyInputState& state,
                         const KeyEvent& event);
+
+// Focus reported by the renderer. Switches Normal/Insert and drops any
+// pending count or key sequence. The page moved on; the old prefix did not.
+void NoteEditableFocus(KeyInputState& state, bool editable);
+
+// Main-frame navigation. Drops consumed-press tracking so a key-up that the
+// load discarded cannot swallow a later key-up of the same key.
+void NoteNavigation(KeyInputState& state);
 
 }  // namespace vrowser

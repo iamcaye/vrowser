@@ -1,11 +1,21 @@
 #!/bin/sh
 # Opens Vrowser, loads a page, and expects the process to exit.
-# Usage: tools/smoke_test.sh [path/to/Vrowser.app]
+# Usage: tools/smoke_test.sh [executable | path/to/Vrowser.app]
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
-app=${1:-"$root/build/debug/apps/desktop/Debug/Vrowser.app"}
-bin="$app/Contents/MacOS/Vrowser"
+target=${1:-}
+if [ -n "$target" ] && [ ! -d "$target" ]; then
+  bin=$target
+elif [ -n "$target" ]; then
+  bin="$target/Contents/MacOS/Vrowser"
+elif [ -x "$root/build/debug/apps/desktop/Debug/vrowser" ]; then
+  bin="$root/build/debug/apps/desktop/Debug/vrowser"
+elif [ -x "$root/build/debug/apps/desktop/Debug/vrowser.exe" ]; then
+  bin="$root/build/debug/apps/desktop/Debug/vrowser.exe"
+else
+  bin="$root/build/debug/apps/desktop/Debug/Vrowser.app/Contents/MacOS/Vrowser"
+fi
 profile=${VROWSER_SMOKE_PROFILE:-"$root/build/smoke-profile"}
 url=${VROWSER_SMOKE_URL:-https://example.com}
 rm -rf "$profile"

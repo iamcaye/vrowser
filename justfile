@@ -2,12 +2,19 @@
 # Shortcuts for the CMake presets. Run `just` to list recipes.
 
 app := "build/debug/apps/desktop/Debug/Vrowser.app"
-bin := app / "Contents/MacOS/Vrowser"
+bin := if os() == "macos" {
+    app / "Contents/MacOS/Vrowser"
+} else if os() == "windows" {
+    "build/debug/apps/desktop/Debug/vrowser.exe"
+} else {
+    "build/debug/apps/desktop/Debug/vrowser"
+}
 profile := "build/dev-profile"
 # Debug builds are re-signed on every build, so macOS would ask for the
 # "Chromium Safe Storage" keychain item on each launch. The dev profile uses
 # Chromium's mock keychain instead. Do not use this for a real profile.
-dev_flags := "--use-mock-keychain"
+dev_flags := if os() == "macos" { "--use-mock-keychain" } else { "" }
+mock_keychain := if os() == "macos" { "1" } else { "0" }
 
 # List recipes.
 default:
@@ -42,7 +49,7 @@ test:
 
 # Build, then open a window, load a page, and expect a clean exit.
 smoke: build
-    VROWSER_SMOKE_MOCK_KEYCHAIN=1 tools/smoke_test.sh
+    VROWSER_SMOKE_MOCK_KEYCHAIN={{ mock_keychain }} tools/smoke_test.sh "{{ bin }}"
 
 # Build, then send keys to a test page and check Normal and Insert modes.
 key-smoke: build

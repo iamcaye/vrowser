@@ -11,9 +11,10 @@
 namespace vrowser {
 namespace {
 
-// Fixtures follow the shape CEF reports on each platform: macOS and Linux send
-// a key-down that already carries the character, Windows sends a raw key-down
-// (often without a character) followed by a separate character event.
+// Fixtures follow the shape CEF reports on each platform: macOS sends a
+// key-down that already carries the character. Windows and windowed Linux
+// send a raw key-down (Linux often with a character) followed by a separate
+// character event.
 RawKeyInput MacKeyDown(int key_code, char32_t character, uint32_t flags = 0) {
   return RawKeyInput{RawKeyType::kKeyDown, key_code, character, flags};
 }
@@ -113,11 +114,25 @@ TEST(NormalizeKeyTest, KeyUpIsNotAnAction) {
   EXPECT_FALSE(event->key_down);
 }
 
-TEST(NormalizeKeyTest, CharacterOnlyEventsAreDropped) {
-  // Windows follows the raw key-down with a character event. Acting on both
-  // would run a binding twice.
-  EXPECT_FALSE(
-      NormalizeKey(RawKeyInput{RawKeyType::kChar, 'J', U'j', 0}).has_value());
+TEST(NormalizeKeyTest, CharacterEventIsNotAKeyDown) {
+  // Windows and Linux can follow a raw key-down with a character event.
+  // It must not look like a second key-down, or a binding would run twice.
+  const auto event = NormalizeKey(RawKeyInput{RawKeyType::kChar, 'J', U'j', 0});
+  ASSERT_TRUE(event.has_value());
+  EXPECT_TRUE(event->character_only);
+  EXPECT_FALSE(event->key_down);
+  EXPECT_EQ(event->character, U'j');
+  EXPECT_TRUE(event->key.empty());
+}
+
+TEST(NormalizeKeyTest, RepeatFlagIsNotAModifier) {
+  const auto event = NormalizeKey(
+      RawKeyInput{RawKeyType::kRawKeyDown, 'R', U'r', kRawModifierRepeat});
+  ASSERT_TRUE(event.has_value());
+  EXPECT_TRUE(event->repeat);
+  EXPECT_TRUE(event->key_down);
+  EXPECT_EQ(event->key, "r");
+  EXPECT_EQ(event->modifiers, Modifiers{});
 }
 
 TEST(NormalizeKeyTest, UnknownKeyCodesAreDropped) {

@@ -69,10 +69,14 @@ create more than one tab and can report frame focus.
   whether to consume it. Normal mode consumes keys that complete or extend a
   binding and forwards the rest, so browser shortcuts still work. Insert mode
   forwards everything except Escape, which returns to Normal and is consumed.
-  Mode and pending keys are kept per tab.
+  Mode and pending keys are kept per tab. A count (`3r`) is passed to
+  `CommandRegistry::Run`, which repeats the command that many times. OS key
+  repeat does not run the binding again. A character event after a consumed
+  key-down is consumed too. Editable-focus messages clear a pending sequence,
+  and a main-frame load clears consumed key-up tracking.
 - Editable focus. The renderer's `CefRendererApp::OnFocusedNodeChanged` sends
   `vrowser.editable-focus` with one bool. The browser accepts only that message
   shape from `PID_RENDERER` and uses it only to switch that tab between Normal
   and Insert. Focus inside cross-process iframes is #23.
 - One default binding: `r` runs the `reload` command through the
-  `CommandRegistry`. Scrolling bindings are #19.
+  `CommandRegistry`. A count repeats that command. Scrolling bindings are #19.

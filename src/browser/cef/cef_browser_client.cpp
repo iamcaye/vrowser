@@ -56,6 +56,7 @@ static_assert(kRawModifierShift == EVENTFLAG_SHIFT_DOWN);
 static_assert(kRawModifierControl == EVENTFLAG_CONTROL_DOWN);
 static_assert(kRawModifierAlt == EVENTFLAG_ALT_DOWN);
 static_assert(kRawModifierMeta == EVENTFLAG_COMMAND_DOWN);
+static_assert(kRawModifierRepeat == EVENTFLAG_IS_REPEAT);
 
 std::string DataUri(const std::string& data, const std::string& mime_type) {
   return "data:" + mime_type + ";base64," +
@@ -94,10 +95,14 @@ void CefBrowserClient::RegisterCommands() {
 
 void CefBrowserClient::RunBinding(const KeyDispatch& dispatch) {
   const CommandResult result =
-      commands_.Run(dispatch.action->command, dispatch.action->args);
+      commands_.Run(dispatch.action->command, dispatch.action->args,
+                    dispatch.count, dispatch.has_count);
   std::fprintf(
       stderr, "vrowser: command %s%s%s\n", dispatch.action->command.c_str(),
       result.ok() ? "" : " failed: ", std::string(result.error()).c_str());
+  if (dispatch.has_count && dispatch.count != 1) {
+    std::fprintf(stderr, "vrowser: count %d\n", dispatch.count);
+  }
 }
 
 bool CefBrowserClient::OnProcessMessageReceived(
@@ -119,8 +124,7 @@ bool CefBrowserClient::OnProcessMessageReceived(
   const bool editable = args->GetBool(0);
   KeyInputState& input = key_inputs_[browser->GetIdentifier()];
   const Mode before = input.mode.mode();
-  input.mode.Apply(editable ? ModeEvent::kEditableFocusGained
-                            : ModeEvent::kEditableFocusLost);
+  NoteEditableFocus(input, editable);
   if (input.mode.mode() != before) {
     std::fprintf(stderr, "vrowser: mode %s\n",
                  input.mode.mode() == Mode::kInsert ? "insert" : "normal");
@@ -252,9 +256,11 @@ void CefBrowserClient::OnLoadStart(
     CefRefPtr<CefFrame> frame,
     CefLoadHandler::TransitionType transition_type) {
   CEF_REQUIRE_UI_THREAD();
-  (void)browser;
   (void)transition_type;
   if (frame->IsMain()) {
+    // The load can drop a key-up. Forget consumed presses so the next key-up
+    // of that key is not swallowed.
+    NoteNavigation(key_inputs_[browser->GetIdentifier()]);
     std::fprintf(stderr, "vrowser: load-start %s\n",
                  frame->GetURL().ToString().c_str());
   }
@@ -549,6 +555,7 @@ std::string CefBrowserClient::KeySmokePageUrl() {
 void CefBrowserClient::SendTestKey(CefRefPtr<CefBrowser> browser,
                                    int windows_key_code,
                                    int mac_key_code,
+                                   int linux_key_code,
                                    char16_t character) {
   CefRefPtr<CefBrowserHost> host = browser->GetHost();
   host->SetFocus(true);
@@ -556,20 +563,34 @@ void CefBrowserClient::SendTestKey(CefRefPtr<CefBrowser> browser,
   // CefBrowserHost::SendKeyEvent trips a Chromium DCHECK for windowed
   // browsers on macOS, so send a native event instead.
   (void)windows_key_code;
+  (void)linux_key_code;
   PlatformSendTestKey(browser, mac_key_code, character);
 #else
-  // Untested: Linux and Windows have not run the key smoke test.
+  // Linux windowed CEF reports X11 keycodes (evdev code + 8), not macOS
+  // virtual key codes. A focused field drops a key whose native code is
+  // wrong even when the same event reaches the page body. Windows uses the
+  // virtual key as the native code; this path has not been run there.
   (void)mac_key_code;
   CefKeyEvent event;
   event.windows_key_code = windows_key_code;
-  event.native_key_code = mac_key_code;
+#if defined(OS_LINUX)
+  event.native_key_code = linux_key_code;
+#else
+  event.native_key_code = windows_key_code;
+  (void)linux_key_code;
+#endif
   event.character = character;
   event.unmodified_character = character;
   event.type = KEYEVENT_RAWKEYDOWN;
   host->SendKeyEvent(event);
   if (character >= 0x20) {
+    // Linux CHAR events carry the character in windows_key_code, not the
+    // virtual key. Sending the virtual key here skips the DOM keydown once
+    // an editor is focused.
     event.type = KEYEVENT_CHAR;
+    event.windows_key_code = character;
     host->SendKeyEvent(event);
+    event.windows_key_code = windows_key_code;
   }
   event.type = KEYEVENT_KEYUP;
   host->SendKeyEvent(event);
@@ -598,9 +619,9 @@ void CefBrowserClient::KeySmokeStep(CefRefPtr<CefBrowser> browser,
     FinishSmoke(1);
     return;
   }
-  constexpr int kVkX = 'X', kMacX = 7;
-  constexpr int kVkR = 'R', kMacR = 15;
-  constexpr int kVkEscape = 0x1B, kMacEscape = 53;
+  constexpr int kVkX = 'X', kMacX = 7, kLinuxX = 53;
+  constexpr int kVkR = 'R', kMacR = 15, kLinuxR = 27;
+  constexpr int kVkEscape = 0x1B, kMacEscape = 53, kLinuxEscape = 9;
 
   struct Step {
     const char* wait_for;
@@ -624,27 +645,33 @@ void CefBrowserClient::KeySmokeStep(CefRefPtr<CefBrowser> browser,
   switch (key_smoke_step_++) {
     case 0:
       CefPostTask(TID_UI, base::BindOnce(&CefBrowserClient::SendTestKey, this,
-                                         browser, kVkX, kMacX, u'x'));
+                                         browser, kVkX, kMacX, kLinuxX, u'x'));
       break;
     case 1:
       CefPostTask(TID_UI, base::BindOnce(&CefBrowserClient::SendTestKey, this,
-                                         browser, kVkR, kMacR, u'r'));
+                                         browser, kVkR, kMacR, kLinuxR, u'r'));
       break;
     case 2:
       browser->GetMainFrame()->ExecuteJavaScript(
           "document.getElementById('f').focus()", "", 0);
       break;
     case 3:
-      CefPostTask(TID_UI, base::BindOnce(&CefBrowserClient::SendTestKey, this,
-                                         browser, kVkR, kMacR, u'r'));
+      // OnFocusedNodeChanged can arrive before the editor is ready to take a
+      // key. Sending immediately is flaky on Linux: the event is forwarded
+      // but never becomes a DOM keydown. A short delay lets focus settle.
+      CefPostDelayedTask(TID_UI,
+                         base::BindOnce(&CefBrowserClient::SendTestKey, this,
+                                        browser, kVkR, kMacR, kLinuxR, u'r'),
+                         200);
       break;
     case 4:
-      CefPostTask(TID_UI, base::BindOnce(&CefBrowserClient::SendTestKey, this,
-                                         browser, kVkEscape, kMacEscape, 0x1B));
+      CefPostTask(TID_UI,
+                  base::BindOnce(&CefBrowserClient::SendTestKey, this, browser,
+                                 kVkEscape, kMacEscape, kLinuxEscape, 0x1B));
       break;
     case 5:
       CefPostTask(TID_UI, base::BindOnce(&CefBrowserClient::SendTestKey, this,
-                                         browser, kVkX, kMacX, u'x'));
+                                         browser, kVkX, kMacX, kLinuxX, u'x'));
       break;
     case 6:
       std::fprintf(stderr, "vrowser-smoke: keys ok\n");
