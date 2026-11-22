@@ -75,6 +75,7 @@ Clang 21.0.0, Ninja 1.13.2.
 | `just key-smoke` (`--vrowser-key-smoke-test`, Chrome style) | unbound `x` reached the page, `r` ran `reload` and did not, focused field selected Insert, Escape returned to Normal and did not reach the page; `j` 60, `3j` 240, `k` 180, `G` bottom, `gg` 0, `d` half a viewport, `u` 0, no motion key reached the page; `vrowser-smoke: keys ok`, exit 0 |
 | `--vrowser-key-smoke-test --use-alloy-style` | not supported: synthesized keys never reach Alloy pages, even without a keyboard handler; exits 1 with a message |
 | Real keyboard, Chrome style and `--use-alloy-style` (manual, `https://duckduckgo.com`) | `r` reloads and stays out of the page, a focused field selects Insert and types `r`, Escape returns to Normal and does not reach the field, the next `r` reloads; `3r` reloads three times; a held `r` reloads once; Cmd+L and unbound keys still reach the browser and page |
+| Scroll bindings, real keyboard, Chrome style and `--use-alloy-style` (manual, long Wikipedia page) | `j`/`k` move a line step, `5j` five steps, `d`/`u` half a page, `G` bottom, `gg` top; `j` in a focused field types and does not scroll, and scrolls again after Escape |
 | Chrome-style smoke (`--vrowser-smoke-test`) | exit 0, `vrowser-smoke: ok 200` |
 | Alloy-style smoke (`--use-alloy-style --vrowser-smoke-test`) | exit 0, `vrowser-smoke: ok 200` |
 | `https://expired.badssl.com/` Chrome style | Chromium keeps the error UI; no client data URL |
