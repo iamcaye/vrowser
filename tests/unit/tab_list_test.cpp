@@ -91,5 +91,54 @@ TEST(TabListTest, CloseAndActivateRejectUnknownIds) {
   EXPECT_EQ(tabs.active(), 1);
 }
 
+TabList ThreeTabs() {
+  TabList tabs;
+  tabs.Append(1);
+  tabs.Append(2);
+  tabs.Append(3);
+  return tabs;
+}
+
+TEST(TabListTest, NextAndPreviousWrap) {
+  TabList tabs = ThreeTabs();  // 3 is active.
+  EXPECT_EQ(tabs.ActivateNext(), 1);
+  EXPECT_EQ(tabs.active(), 1);
+  EXPECT_EQ(tabs.ActivatePrevious(), 3);
+  EXPECT_EQ(tabs.ActivatePrevious(), 2);
+  EXPECT_EQ(tabs.ActivateNext(), 3);
+}
+
+TEST(TabListTest, StepsMoveSeveralTabsAndWrap) {
+  TabList tabs = ThreeTabs();
+  tabs.Activate(1);
+  EXPECT_EQ(tabs.ActivateNext(2), 3);
+  EXPECT_EQ(tabs.ActivateNext(4), 1);
+  EXPECT_EQ(tabs.ActivatePrevious(5), 2);
+  // A count far larger than the list still lands on a tab.
+  // From index 1, (1 + 99999) % 3 is index 1 again.
+  EXPECT_EQ(tabs.ActivateNext(99999), 2);
+}
+
+TEST(TabListTest, StepsBelowOneMoveOne) {
+  TabList tabs = ThreeTabs();
+  tabs.Activate(2);
+  EXPECT_EQ(tabs.ActivateNext(0), 3);
+  EXPECT_EQ(tabs.ActivatePrevious(-7), 2);
+}
+
+TEST(TabListTest, CyclingOneTabStaysOnIt) {
+  TabList tabs;
+  tabs.Append(7);
+  EXPECT_EQ(tabs.ActivateNext(), 7);
+  EXPECT_EQ(tabs.ActivatePrevious(3), 7);
+}
+
+TEST(TabListTest, CyclingAnEmptyListDoesNothing) {
+  TabList tabs;
+  EXPECT_EQ(tabs.ActivateNext(), std::nullopt);
+  EXPECT_EQ(tabs.ActivatePrevious(), std::nullopt);
+  EXPECT_EQ(tabs.active(), std::nullopt);
+}
+
 }  // namespace
 }  // namespace vrowser

@@ -21,8 +21,9 @@ struct StartupConfig {
   bool use_views{true};
   // Load the initial URL, print one result line, and quit.
   bool smoke_test{false};
-  // Like smoke_test, but opens the URL in a second tab, closes the first tab,
-  // checks the second is still shown, and quits. Implies smoke_test.
+  // Like smoke_test, but opens the URL in a second tab, switches tabs with
+  // `gt` and `gT`, and closes both with `x`, so closing the last tab quits.
+  // Implies smoke_test.
   bool tab_smoke_test{false};
   // Like smoke_test, but loads a built-in test page, sends keys, checks that
   // Normal-mode bindings are consumed, Insert mode follows a focused text

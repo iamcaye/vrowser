@@ -59,6 +59,22 @@ static_assert(kRawModifierAlt == EVENTFLAG_ALT_DOWN);
 static_assert(kRawModifierMeta == EVENTFLAG_COMMAND_DOWN);
 static_assert(kRawModifierRepeat == EVENTFLAG_IS_REPEAT);
 
+// Smoke-test keys: Windows virtual key, macOS key code, X11 keycode,
+// character.
+constexpr TestKey kTestQ{'Q', 12, 24, u'q'};
+constexpr TestKey kTestR{'R', 15, 27, u'r'};
+constexpr TestKey kTestEscape{0x1B, 53, 9, 0x1B};
+constexpr TestKey kTestJ{'J', 38, 44, u'j'};
+constexpr TestKey kTestK{'K', 40, 45, u'k'};
+constexpr TestKey kTestD{'D', 2, 40, u'd'};
+constexpr TestKey kTestU{'U', 32, 30, u'u'};
+constexpr TestKey kTestG{'G', 5, 42, u'g'};
+constexpr TestKey kTestShiftG{'G', 5, 42, u'G', true};
+constexpr TestKey kTestT{'T', 17, 28, u't'};
+constexpr TestKey kTestShiftT{'T', 17, 28, u'T', true};
+constexpr TestKey kTestX{'X', 7, 53, u'x'};
+constexpr TestKey kTest3{'3', 20, 12, u'3'};
+
 std::string DataUri(const std::string& data, const std::string& mime_type) {
   return "data:" + mime_type + ";base64," +
          CefURIEncode(CefBase64Encode(data.data(), data.size()), false)
@@ -116,7 +132,71 @@ void CefBrowserClient::RegisterCommands() {
           return CommandResult::Ok();
         });
   }
+  commands_.RegisterCounted("tab-next",
+                            "Show the next tab, wrapping to the first",
+                            [this](const std::vector<std::string>&, int count) {
+                              SwitchTab(count);
+                              return CommandResult::Ok();
+                            });
+  commands_.RegisterCounted("tab-previous",
+                            "Show the previous tab, wrapping to the last",
+                            [this](const std::vector<std::string>&, int count) {
+                              SwitchTab(-count);
+                              return CommandResult::Ok();
+                            });
+  // Counted so that `3x` closes one tab instead of asking the same browser to
+  // close three times.
+  commands_.RegisterCounted(
+      "tab-close", "Close the current tab; closing the last one quits",
+      [this](const std::vector<std::string>&, int) {
+        if (CefRefPtr<CefBrowser> browser = CommandBrowser()) {
+          CloseTab(browser->GetIdentifier());
+        }
+        return CommandResult::Ok();
+      });
   CHECK(AddDefaultBindings(bindings_));
+}
+
+void CefBrowserClient::SwitchTab(int steps) {
+  CEF_REQUIRE_UI_THREAD();
+  CefRefPtr<CefBrowser> from = CommandBrowser();
+  // A popup has its own window and is not a tab.
+  if (!from || !tabs_.Contains(from->GetIdentifier()) || steps == 0) {
+    return;
+  }
+  const std::optional<TabId> before = tabs_.active();
+  const std::optional<TabId> after =
+      steps > 0 ? tabs_.ActivateNext(steps) : tabs_.ActivatePrevious(-steps);
+  if (!before || !after || *after == *before) {
+    return;
+  }
+  // The key that switched is still down; its key-up reaches the new tab.
+  TransferHeldKeys(key_inputs_[*before], key_inputs_[*after]);
+  ShowActiveTab();
+  if (CefRefPtr<CefBrowser> browser = FindBrowser(*after)) {
+    browser->GetHost()->SetFocus(true);
+  }
+  ShowActiveTitle();
+  std::fprintf(stderr, "vrowser: tab %d active\n", *after);
+  TabSmokeActivated(*after);
+}
+
+void CefBrowserClient::ShowActiveTitle() {
+  CEF_REQUIRE_UI_THREAD();
+  CefRefPtr<CefBrowser> browser = ActiveBrowser();
+  CefRefPtr<CefBrowserView> view =
+      browser ? CefBrowserView::GetForBrowser(browser) : nullptr;
+  CefRefPtr<CefWindow> window = view ? view->GetWindow() : nullptr;
+  if (!window) {
+    return;
+  }
+  CefRefPtr<CefNavigationEntry> entry =
+      browser->GetHost()->GetVisibleNavigationEntry();
+  if (!entry) {
+    return;
+  }
+  const CefString title = entry->GetTitle();
+  window->SetTitle(title.empty() ? entry->GetURL() : title);
 }
 
 void CefBrowserClient::ScrollFocusedFrame(ScrollMotion motion, int count) {
@@ -221,6 +301,11 @@ void CefBrowserClient::OnTitleChange(CefRefPtr<CefBrowser> browser,
   if (key_smoke_test_) {
     KeySmokeStep(browser, "title " + title.ToString());
   }
+  const TabId id = browser->GetIdentifier();
+  if (tabs_.Contains(id) && tabs_.active() != id) {
+    // A background tab does not own the window title.
+    return;
+  }
   if (CefRefPtr<CefBrowserView> browser_view =
           CefBrowserView::GetForBrowser(browser)) {
     if (CefRefPtr<CefWindow> window = browser_view->GetWindow()) {
@@ -261,6 +346,12 @@ bool CefBrowserClient::DoClose(CefRefPtr<CefBrowser> browser) {
       // Do it in a task so the view is not destroyed inside DoClose.
       tabs_.Close(id);
       ShowActiveTab();
+      if (CefRefPtr<CefBrowser> active = ActiveBrowser()) {
+        // A closing key (`x`) is still down; its key-up reaches this tab.
+        TransferHeldKeys(key_inputs_[id], key_inputs_[active->GetIdentifier()]);
+        active->GetHost()->SetFocus(true);
+      }
+      ShowActiveTitle();
       CefPostTask(TID_UI, base::BindOnce(
                               [](CefRefPtr<CefWindow> parent,
                                  CefRefPtr<CefBrowserView> child) {
@@ -534,6 +625,13 @@ void CefBrowserClient::ShowActiveTab() {
   }
 }
 
+// Tab smoke stages:
+//   0  wait for the first tab's load, then open a second tab.
+//   1  wait for the second tab's load, then type `gt` in it.
+//   2  `gt` wrapped to the first tab; type `gT`.
+//   3  `gT` wrapped to the second tab; type `x`.
+//   4  `x` closed the second tab; check the first is shown, type `x` again.
+//   5  `x` closed the last tab; the process quits with 0.
 void CefBrowserClient::TabSmokeLoadEnd(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
   const TabId id = browser->GetIdentifier();
@@ -545,28 +643,79 @@ void CefBrowserClient::TabSmokeLoadEnd(CefRefPtr<CefBrowser> browser) {
   }
   if (tab_smoke_stage_ == 1 && id != tab_smoke_first_) {
     tab_smoke_stage_ = 2;
+    tab_smoke_second_ = id;
     std::fprintf(stderr, "vrowser-smoke: tabs open %zu\n", tabs_.size());
     if (tabs_.size() != 2 || tabs_.active() != id) {
       FinishSmoke(1);
       return;
     }
-    CloseTab(tab_smoke_first_);
+    SendTestKeys(browser, {kTestG, kTestT});
+  }
+}
+
+void CefBrowserClient::TabSmokeActivated(TabId id) {
+  if (!tab_smoke_test_ || smoke_finished_) {
+    return;
+  }
+  const bool expected = (tab_smoke_stage_ == 2 && id == tab_smoke_first_) ||
+                        (tab_smoke_stage_ == 3 && id == tab_smoke_second_);
+  std::fprintf(stderr, "vrowser-smoke: %s activated tab %d\n",
+               tab_smoke_stage_ == 2 ? "gt" : "gT", id);
+  if (!expected) {
+    FinishSmoke(1);
+    return;
+  }
+  const bool to_first = tab_smoke_stage_ == 2;
+  ++tab_smoke_stage_;
+  if (CefRefPtr<CefBrowser> browser = FindBrowser(id)) {
+    if (to_first) {
+      SendTestKeys(browser, {kTestG, kTestShiftT});
+    } else {
+      SendTestKeys(browser, {kTestX});
+    }
   }
 }
 
 void CefBrowserClient::TabSmokeClosed(TabId id) {
-  if (!tab_smoke_test_ || tab_smoke_stage_ != 2 || id != tab_smoke_first_) {
+  if (!tab_smoke_test_ || smoke_finished_) {
+    return;
+  }
+  if (tab_smoke_stage_ == 5 && id == tab_smoke_first_) {
+    std::fprintf(stderr, "vrowser-smoke: x closed the last tab, quitting\n");
+    return;
+  }
+  if (tab_smoke_stage_ != 4 || id != tab_smoke_second_) {
     return;
   }
   CefRefPtr<CefBrowser> remaining = ActiveBrowser();
   CefRefPtr<CefBrowserView> view =
       remaining ? CefBrowserView::GetForBrowser(remaining) : nullptr;
-  const bool ok = tabs_.size() == 1 && view && view->IsVisible() &&
-                  view->GetWindow() && view->GetWindow()->IsVisible();
+  const bool ok = tabs_.size() == 1 && tabs_.active() == tab_smoke_first_ &&
+                  view && view->IsVisible() && view->GetWindow() &&
+                  view->GetWindow()->IsVisible();
   std::fprintf(stderr, "vrowser-smoke: tabs %s, %zu open, remaining %s\n",
                ok ? "ok" : "failed", tabs_.size(),
                view && view->IsVisible() ? "visible" : "hidden");
-  FinishSmoke(ok ? 0 : 1);
+  if (!ok) {
+    FinishSmoke(1);
+    return;
+  }
+  // Closing the last tab must quit on its own. The 45 s smoke timeout still
+  // applies and exits 2 if it does not.
+  tab_smoke_stage_ = 5;
+  exit_code_ = 0;
+  SendTestKeys(remaining, {kTestX});
+}
+
+void CefBrowserClient::SendTestKeys(CefRefPtr<CefBrowser> browser,
+                                    std::initializer_list<TestKey> keys,
+                                    int64_t delay_ms) {
+  for (const TestKey& key : keys) {
+    CefPostDelayedTask(
+        TID_UI,
+        base::BindOnce(&CefBrowserClient::SendTestKey, this, browser, key),
+        delay_ms);
+  }
 }
 
 void CefBrowserClient::OnSmokeTimeout() {
@@ -675,18 +824,6 @@ void CefBrowserClient::KeySmokeStep(CefRefPtr<CefBrowser> browser,
     FinishSmoke(1);
     return;
   }
-  // Windows virtual key, macOS key code, X11 keycode, character.
-  static constexpr TestKey kX{'X', 7, 53, u'x'};
-  static constexpr TestKey kR{'R', 15, 27, u'r'};
-  static constexpr TestKey kEscape{0x1B, 53, 9, 0x1B};
-  static constexpr TestKey kJ{'J', 38, 44, u'j'};
-  static constexpr TestKey kK{'K', 40, 45, u'k'};
-  static constexpr TestKey kD{'D', 2, 40, u'd'};
-  static constexpr TestKey kU{'U', 32, 30, u'u'};
-  static constexpr TestKey kG{'G', 5, 42, u'g'};
-  static constexpr TestKey kShiftG{'G', 5, 42, u'G', true};
-  static constexpr TestKey k3{'3', 20, 12, u'3'};
-
   struct Step {
     const char* wait_for;
     const char* note;
@@ -696,25 +833,25 @@ void CefBrowserClient::KeySmokeStep(CefRefPtr<CefBrowser> browser,
     int key_count;
   };
   static constexpr Step kSteps[] = {
-      {"load-end", "page loaded; unbound x goes to the page", {kX}, 1},
-      {"title key:x:body",
+      {"load-end", "page loaded; unbound q goes to the page", {kTestQ}, 1},
+      {"title key:q:body",
        "bound r reloads and stays out of the page",
-       {kR},
+       {kTestR},
        1},
       {"load-end", "reloaded; focus the text field", {}, 0},
-      {"mode insert", "Insert mode; r goes to the field", {kR}, 1},
-      {"title key:r:f", "Escape leaves Insert", {kEscape}, 1},
+      {"mode insert", "Insert mode; r goes to the field", {kTestR}, 1},
+      {"title key:r:f", "Escape leaves Insert", {kTestEscape}, 1},
       {"mode normal",
-       "Normal mode; x goes to the page, Escape did not",
-       {kX},
+       "Normal mode; q goes to the page, Escape did not",
+       {kTestQ},
        1},
-      {"title key:x:f", "j scrolls one line step", {kJ}, 1},
-      {"title scroll:60", "3j scrolls three line steps", {k3, kJ}, 2},
-      {"title scroll:240", "k scrolls up one line step", {kK}, 1},
-      {"title scroll:180", "G scrolls to the bottom", {kShiftG}, 1},
-      {"title scroll:bottom", "gg scrolls to the top", {kG, kG}, 2},
-      {"title scroll:0", "d scrolls half a page down", {kD}, 1},
-      {"title scroll:half", "u scrolls half a page up", {kU}, 1},
+      {"title key:q:f", "j scrolls one line step", {kTestJ}, 1},
+      {"title scroll:60", "3j scrolls three line steps", {kTest3, kTestJ}, 2},
+      {"title scroll:240", "k scrolls up one line step", {kTestK}, 1},
+      {"title scroll:180", "G scrolls to the bottom", {kTestShiftG}, 1},
+      {"title scroll:bottom", "gg scrolls to the top", {kTestG, kTestG}, 2},
+      {"title scroll:0", "d scrolls half a page down", {kTestD}, 1},
+      {"title scroll:half", "u scrolls half a page up", {kTestU}, 1},
       {"title scroll:0", "done", {}, 0},
   };
   constexpr int kStepCount = static_cast<int>(std::size(kSteps));

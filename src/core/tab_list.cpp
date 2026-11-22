@@ -41,6 +41,28 @@ bool TabList::Close(TabId id) {
   return true;
 }
 
+std::optional<TabId> TabList::ActivateNext(int steps) {
+  return ActivateOffset(std::max(1, steps));
+}
+
+std::optional<TabId> TabList::ActivatePrevious(int steps) {
+  return ActivateOffset(-std::max(1, steps));
+}
+
+std::optional<TabId> TabList::ActivateOffset(std::ptrdiff_t offset) {
+  if (tabs_.empty()) {
+    return std::nullopt;
+  }
+  const auto size = static_cast<std::ptrdiff_t>(tabs_.size());
+  std::ptrdiff_t index = 0;
+  if (active_) {
+    index = std::find(tabs_.begin(), tabs_.end(), *active_) - tabs_.begin();
+  }
+  const std::ptrdiff_t next = ((index + offset) % size + size) % size;
+  active_ = tabs_[static_cast<size_t>(next)];
+  return active_;
+}
+
 bool TabList::Activate(TabId id) {
   if (!Contains(id)) {
     return false;

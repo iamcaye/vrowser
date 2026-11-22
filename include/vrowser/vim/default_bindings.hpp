@@ -16,6 +16,9 @@ namespace vrowser {
 //   u   scroll-half-page-up      half the viewport, times the count
 //   gg  scroll-to-top
 //   G   scroll-to-bottom
+//   gt  tab-next                 count tabs right, wrapping
+//   gT  tab-previous             count tabs left, wrapping
+//   x   tab-close                the current tab; the last one quits
 //
 // Returns false if any binding could not be added, for example because
 // `bindings` already binds one of these sequences.

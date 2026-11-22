@@ -47,6 +47,9 @@ TEST_F(DefaultBindingsTest, EachKeyRunsItsCommand) {
       {{"u"}, "scroll-half-page-up"},
       {{"g", "g"}, "scroll-to-top"},
       {{"G"}, "scroll-to-bottom"},
+      {{"g", "t"}, "tab-next"},
+      {{"g", "T"}, "tab-previous"},
+      {{"x"}, "tab-close"},
   };
   for (const auto& c : kCases) {
     const KeyResolution result = Normal(c.keys);
@@ -67,6 +70,13 @@ TEST_F(DefaultBindingsTest, CountIsPassedWithTheMotion) {
   const KeyResolution up = Normal({"1", "2", "k"});
   EXPECT_EQ(up.action.command, "scroll-up");
   EXPECT_EQ(up.count, 12);
+}
+
+TEST_F(DefaultBindingsTest, CountIsPassedWithTabMotions) {
+  const KeyResolution next = Normal({"3", "g", "t"});
+  EXPECT_EQ(next.action.command, "tab-next");
+  EXPECT_TRUE(next.has_count);
+  EXPECT_EQ(next.count, 3);
 }
 
 TEST_F(DefaultBindingsTest, SingleGIsAPrefix) {

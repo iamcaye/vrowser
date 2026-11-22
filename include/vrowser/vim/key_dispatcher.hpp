@@ -75,6 +75,11 @@ KeyDispatch DispatchKey(const KeyBindings& bindings,
 // pending count or key sequence. The page moved on; the old prefix did not.
 void NoteEditableFocus(KeyInputState& state, bool editable);
 
+// The shell moved from one tab to another while keys may still be down, as
+// after `gt`. Moves the consumed presses of `from` to `to`, so their key-ups
+// are consumed in the tab that receives them instead of reaching its page.
+void TransferHeldKeys(KeyInputState& from, KeyInputState& to);
+
 // Main-frame navigation. Drops consumed-press tracking so a key-up that the
 // load discarded cannot swallow a later key-up of the same key.
 void NoteNavigation(KeyInputState& state);
