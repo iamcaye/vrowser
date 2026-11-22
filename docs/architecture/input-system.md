@@ -99,7 +99,13 @@ create more than one tab and can report frame focus.
   (`ScrollScript` in `src/core`) with `ExecuteJavaScript` in the focused
   frame, or the main frame when none has focus. It scrolls the frame's
   document, so a page that scrolls an inner element instead (some web apps)
-  does not move yet.
+  does not move yet. Each step eases out over `kScrollAnimationMs` (120 ms)
+  from one `requestAnimationFrame` loop. A step that arrives mid-animation
+  adds to the pending target, so `jjj` ends where `3j` does, and targets are
+  clamped to the page. `prefers-reduced-motion: reduce` makes steps instant,
+  and `kScrollAnimationMs = 0` restores instant scrolling until there is a
+  setting. Steps and the held-key loop share one state object in the page,
+  so each cancels the other.
 - Tab keys: `t` opens a new tab with the start page (the initial `--url`
   until there is a home page setting) and focuses it. `gt` and `gT` move to the next and previous tab and wrap; a count
   moves that many tabs (`3gt`). `x` closes the tab whose key ran it; closing
