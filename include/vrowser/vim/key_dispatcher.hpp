@@ -17,6 +17,11 @@ namespace vrowser {
 struct ConsumedPress {
   std::string key;
   Modifiers modifiers;
+  // The binding this key-down completed, if any.
+  std::optional<BindingAction> action;
+  // Set from the first OS repeat of a press that completed a binding until
+  // its key-up.
+  bool holding{false};
 
   bool operator==(const ConsumedPress&) const = default;
 };
@@ -41,8 +46,20 @@ enum class KeyDisposition {
   kConsume,  // The shell handled it; the page must not see it.
 };
 
+// A key that completed a binding and is now held down.
+enum class HoldEvent {
+  kNone,
+  kStart,     // First OS repeat of the press.
+  kContinue,  // A later OS repeat.
+  kStop,      // Its key-up.
+};
+
 struct KeyDispatch {
   KeyDisposition disposition{KeyDisposition::kForward};
+  HoldEvent hold{HoldEvent::kNone};
+  // The binding of the held press. Set when `hold` is not kNone. The caller
+  // decides which commands keep acting while held; the dispatcher does not.
+  std::optional<BindingAction> held_action;
   // Set when a Normal-mode binding completed.
   std::optional<BindingAction> action;
   int count{1};
@@ -59,10 +76,11 @@ struct KeyDispatch {
 // keys are forwarded.
 //
 // OS key repeat does not run a binding again. A repeat of a consumed press is
-// consumed and ignored. A repeat of a forwarded key is forwarded, so typing
-// still repeats. A non-repeat key-down of a press that is still marked
-// consumed means the key-up was lost; that stale press is dropped before the
-// new key-down is handled.
+// consumed; when that press completed a binding, the repeat and the key-up
+// are reported as a hold (see HoldEvent) so the caller can keep scrolling. A
+// repeat of a forwarded key is forwarded, so typing still repeats. A non-repeat
+// key-down of a press that is still marked consumed means the key-up was lost;
+// that stale press is dropped before the new key-down is handled.
 //
 // A character-only event never starts a binding. It is consumed when the
 // key-down it follows was consumed, so a Windows KEYEVENT_CHAR cannot leak

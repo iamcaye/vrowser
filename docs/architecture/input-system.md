@@ -74,7 +74,18 @@ create more than one tab and can report frame focus.
   forwards everything except Escape, which returns to Normal and is consumed.
   Mode and pending keys are kept per tab. A count (`3r`) is passed to
   `CommandRegistry::Run`, which repeats the command that many times. OS key
-  repeat does not run the binding again. A character event after a consumed
+  repeat does not run the binding again. Instead `DispatchKey` reports a
+  held press that completed a binding (`HoldEvent`: start on the first
+  repeat, continue, stop on key-up), and the client keeps `j`, `k`, `d`, and
+  `u` scrolling from one `requestAnimationFrame` loop in the page
+  (`HeldScrollStartScript`), 900 px/s for lines and two viewports per second
+  for half pages. Repeats push the loop's deadline out (throttled to one
+  script per 150 ms); without them it stops on its own after 600 ms, so a lost
+  key-up or a window that loses focus cannot leave the page scrolling. Key-up,
+  editable focus, a main-frame load, a tab switch, and closing the tab stop
+  it. macOS drops the key-up of a key-down that `OnPreKeyEvent` consumed, so
+  there an app-local `NSEvent` key-up monitor (`PlatformWatchKeyUps`) stops
+  the hold instead. A character event after a consumed
   key-down is consumed too. Editable-focus messages clear a pending sequence,
   and a main-frame load clears consumed key-up tracking.
 - Editable focus. The renderer's `CefRendererApp::OnFocusedNodeChanged` sends

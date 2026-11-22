@@ -27,7 +27,8 @@ struct StartupConfig {
   bool tab_smoke_test{false};
   // Like smoke_test, but loads a built-in test page, sends keys, checks that
   // Normal-mode bindings are consumed, Insert mode follows a focused text
-  // field, and the scroll bindings move the page, and quits. Implies
+  // field, the scroll bindings move the page, and a held `j` keeps scrolling
+  // and stops, and quits. Implies
   // smoke_test.
   bool key_smoke_test{false};
 };

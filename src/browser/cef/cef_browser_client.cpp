@@ -75,6 +75,33 @@ constexpr TestKey kTestShiftT{'T', 17, 28, u'T', true};
 constexpr TestKey kTestX{'X', 7, 53, u'x'};
 constexpr TestKey kTest3{'3', 20, 12, u'3'};
 
+struct ScrollCommand {
+  const char* name;
+  const char* description;
+  ScrollMotion motion;
+};
+constexpr ScrollCommand kScrollCommands[] = {
+    {"scroll-down", "Scroll down one line step", ScrollMotion::kLineDown},
+    {"scroll-up", "Scroll up one line step", ScrollMotion::kLineUp},
+    {"scroll-half-page-down", "Scroll down half a page",
+     ScrollMotion::kHalfPageDown},
+    {"scroll-half-page-up", "Scroll up half a page", ScrollMotion::kHalfPageUp},
+    {"scroll-to-top", "Scroll to the top of the page", ScrollMotion::kTop},
+    {"scroll-to-bottom", "Scroll to the bottom of the page",
+     ScrollMotion::kBottom},
+};
+std::optional<ScrollMotion> MotionForCommand(const std::string& command) {
+  for (const ScrollCommand& entry : kScrollCommands) {
+    if (command == entry.name) {
+      return entry.motion;
+    }
+  }
+  return std::nullopt;
+}
+
+// Keep-alives are throttled; OS repeat can be far faster than needed.
+constexpr auto kHeldKeepAliveInterval = std::chrono::milliseconds(150);
+
 std::string DataUri(const std::string& data, const std::string& mime_type) {
   return "data:" + mime_type + ";base64," +
          CefURIEncode(CefBase64Encode(data.data(), data.size()), false)
@@ -96,6 +123,7 @@ CefBrowserClient::CefBrowserClient(const StartupConfig& config)
   navigation_.SetListener(
       [this](const std::string& url) { LoadInMainFrame(url); });
   RegisterCommands();
+  PlatformWatchKeyUps(true);
 }
 
 void CefBrowserClient::RegisterCommands() {
@@ -108,22 +136,6 @@ void CefBrowserClient::RegisterCommands() {
                        }
                        return CommandResult::Ok();
                      });
-  struct ScrollCommand {
-    const char* name;
-    const char* description;
-    ScrollMotion motion;
-  };
-  static constexpr ScrollCommand kScrollCommands[] = {
-      {"scroll-down", "Scroll down one line step", ScrollMotion::kLineDown},
-      {"scroll-up", "Scroll up one line step", ScrollMotion::kLineUp},
-      {"scroll-half-page-down", "Scroll down half a page",
-       ScrollMotion::kHalfPageDown},
-      {"scroll-half-page-up", "Scroll up half a page",
-       ScrollMotion::kHalfPageUp},
-      {"scroll-to-top", "Scroll to the top of the page", ScrollMotion::kTop},
-      {"scroll-to-bottom", "Scroll to the bottom of the page",
-       ScrollMotion::kBottom},
-  };
   for (const ScrollCommand& command : kScrollCommands) {
     const ScrollMotion motion = command.motion;
     commands_.RegisterCounted(
@@ -177,6 +189,7 @@ void CefBrowserClient::SwitchTab(int steps) {
   if (!before || !after || *after == *before) {
     return;
   }
+  StopHeldScroll();
   // The key that switched is still down; its key-up reaches the new tab.
   TransferHeldKeys(key_inputs_[*before], key_inputs_[*after]);
   ShowActiveTab();
@@ -222,6 +235,66 @@ void CefBrowserClient::ScrollFocusedFrame(ScrollMotion motion, int count) {
   frame->ExecuteJavaScript(ScrollScript(motion, count), "", 0);
 }
 
+void CefBrowserClient::OnNativeKeyUp(int native_key_code) {
+  CEF_REQUIRE_UI_THREAD();
+  if (held_scroll_ && held_scroll_->native_key_code == native_key_code) {
+    StopHeldScroll();
+  }
+}
+
+void CefBrowserClient::HandleHold(CefRefPtr<CefBrowser> browser,
+                                  const KeyDispatch& dispatch,
+                                  int native_key_code) {
+  CEF_REQUIRE_UI_THREAD();
+  if (dispatch.hold == HoldEvent::kNone || !dispatch.held_action) {
+    return;
+  }
+  if (dispatch.hold == HoldEvent::kStop) {
+    StopHeldScroll();
+    return;
+  }
+  const auto now = std::chrono::steady_clock::now();
+  if (dispatch.hold == HoldEvent::kContinue) {
+    if (held_scroll_ && held_scroll_->tab == browser->GetIdentifier() &&
+        now - held_scroll_->last_keep_alive >= kHeldKeepAliveInterval &&
+        held_scroll_->frame->IsValid()) {
+      held_scroll_->frame->ExecuteJavaScript(HeldScrollKeepAliveScript(), "",
+                                             0);
+      held_scroll_->last_keep_alive = now;
+    }
+    return;
+  }
+  // kStart. Only line and half-page scrolls keep going; `r`, `gg`, `G`, and
+  // the tab keys act once.
+  const std::optional<ScrollMotion> motion =
+      MotionForCommand(dispatch.held_action->command);
+  if (!motion || !IsContinuousMotion(*motion)) {
+    return;
+  }
+  StopHeldScroll();
+  CefRefPtr<CefFrame> frame = browser->GetFocusedFrame();
+  if (!frame) {
+    frame = browser->GetMainFrame();
+  }
+  frame->ExecuteJavaScript(HeldScrollStartScript(*motion), "", 0);
+  held_scroll_ =
+      HeldScroll{browser->GetIdentifier(), frame, native_key_code, now};
+  std::fprintf(stderr, "vrowser: hold %s\n",
+               dispatch.held_action->command.c_str());
+}
+
+void CefBrowserClient::StopHeldScroll() {
+  CEF_REQUIRE_UI_THREAD();
+  if (!held_scroll_) {
+    return;
+  }
+  if (held_scroll_->frame->IsValid()) {
+    held_scroll_->frame->ExecuteJavaScript(HeldScrollStopScript(), "", 0);
+  }
+  held_scroll_.reset();
+  std::fprintf(stderr, "vrowser: hold end\n");
+}
+
 void CefBrowserClient::RunBinding(CefRefPtr<CefBrowser> browser,
                                   const KeyDispatch& dispatch) {
   key_target_ = browser;
@@ -254,6 +327,10 @@ bool CefBrowserClient::OnProcessMessageReceived(
     return true;
   }
   const bool editable = args->GetBool(0);
+  if (editable && held_scroll_ &&
+      held_scroll_->tab == browser->GetIdentifier()) {
+    StopHeldScroll();
+  }
   KeyInputState& input = key_inputs_[browser->GetIdentifier()];
   const Mode before = input.mode.mode();
   NoteEditableFocus(input, editable);
@@ -291,10 +368,12 @@ bool CefBrowserClient::OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
   if (dispatch.action) {
     RunBinding(browser, dispatch);
   }
+  HandleHold(browser, dispatch, event.native_key_code);
   return dispatch.disposition == KeyDisposition::kConsume;
 }
 
 CefBrowserClient::~CefBrowserClient() {
+  PlatformWatchKeyUps(false);
   g_instance = nullptr;
 }
 
@@ -393,6 +472,9 @@ void CefBrowserClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
   }
   const TabId id = browser->GetIdentifier();
   key_inputs_.erase(id);
+  if (held_scroll_ && held_scroll_->tab == id) {
+    held_scroll_.reset();
+  }
   if (tabs_.Close(id)) {
     ShowActiveTab();
   }
@@ -412,6 +494,9 @@ void CefBrowserClient::OnLoadStart(
     // The load can drop a key-up. Forget consumed presses so the next key-up
     // of that key is not swallowed.
     NoteNavigation(key_inputs_[browser->GetIdentifier()]);
+    if (held_scroll_ && held_scroll_->tab == browser->GetIdentifier()) {
+      StopHeldScroll();
+    }
     std::fprintf(stderr, "vrowser: load-start %s\n",
                  frame->GetURL().ToString().c_str());
   }
@@ -726,10 +811,10 @@ void CefBrowserClient::SendTestKeys(CefRefPtr<CefBrowser> browser,
                                     std::initializer_list<TestKey> keys,
                                     int64_t delay_ms) {
   for (const TestKey& key : keys) {
-    CefPostDelayedTask(
-        TID_UI,
-        base::BindOnce(&CefBrowserClient::SendTestKey, this, browser, key),
-        delay_ms);
+    CefPostDelayedTask(TID_UI,
+                       base::BindOnce(&CefBrowserClient::SendTestKey, this,
+                                      browser, key, TestKeyPhase::kPress),
+                       delay_ms);
   }
 }
 
@@ -772,13 +857,15 @@ std::string CefBrowserClient::KeySmokePageUrl() {
       "text/html");
 }
 
-void CefBrowserClient::SendTestKey(CefRefPtr<CefBrowser> browser, TestKey key) {
+void CefBrowserClient::SendTestKey(CefRefPtr<CefBrowser> browser,
+                                   TestKey key,
+                                   TestKeyPhase phase) {
   CefRefPtr<CefBrowserHost> host = browser->GetHost();
   host->SetFocus(true);
 #if defined(OS_MAC)
   // CefBrowserHost::SendKeyEvent trips a Chromium DCHECK for windowed
   // browsers on macOS, so send a native event instead.
-  PlatformSendTestKey(browser, key);
+  PlatformSendTestKey(browser, key, phase);
 #else
   // Linux windowed CEF reports X11 keycodes (evdev code + 8), not macOS
   // virtual key codes. A focused field drops a key whose native code is
@@ -791,26 +878,62 @@ void CefBrowserClient::SendTestKey(CefRefPtr<CefBrowser> browser, TestKey key) {
 #else
   event.native_key_code = key.windows_key_code;
 #endif
-  event.modifiers = key.shift ? EVENTFLAG_SHIFT_DOWN : 0;
+  event.modifiers = (key.shift ? EVENTFLAG_SHIFT_DOWN : 0) |
+                    (phase == TestKeyPhase::kRepeat ? EVENTFLAG_IS_REPEAT : 0);
   event.character = key.character;
   event.unmodified_character =
       key.shift && key.character >= u'A' && key.character <= u'Z'
           ? static_cast<char16_t>(key.character - u'A' + u'a')
           : key.character;
-  event.type = KEYEVENT_RAWKEYDOWN;
-  host->SendKeyEvent(event);
-  if (key.character >= 0x20) {
-    // Linux CHAR events carry the character in windows_key_code, not the
-    // virtual key. Sending the virtual key here skips the DOM keydown once
-    // an editor is focused.
-    event.type = KEYEVENT_CHAR;
-    event.windows_key_code = key.character;
+  if (phase != TestKeyPhase::kUp) {
+    event.type = KEYEVENT_RAWKEYDOWN;
     host->SendKeyEvent(event);
-    event.windows_key_code = key.windows_key_code;
+    if (key.character >= 0x20) {
+      // Linux CHAR events carry the character in windows_key_code, not the
+      // virtual key. Sending the virtual key here skips the DOM keydown once
+      // an editor is focused.
+      event.type = KEYEVENT_CHAR;
+      event.windows_key_code = key.character;
+      host->SendKeyEvent(event);
+      event.windows_key_code = key.windows_key_code;
+    }
   }
-  event.type = KEYEVENT_KEYUP;
-  host->SendKeyEvent(event);
+  if (phase == TestKeyPhase::kPress || phase == TestKeyPhase::kUp) {
+    event.type = KEYEVENT_KEYUP;
+    host->SendKeyEvent(event);
+  }
 #endif
+}
+
+void CefBrowserClient::SendTestHold(CefRefPtr<CefBrowser> browser,
+                                    TestKey key,
+                                    int repeats,
+                                    bool release,
+                                    int64_t probe_delay_ms,
+                                    const std::string& probe) {
+  auto at = [&](int64_t ms, TestKeyPhase phase) {
+    CefPostDelayedTask(TID_UI,
+                       base::BindOnce(&CefBrowserClient::SendTestKey, this,
+                                      browser, key, phase),
+                       ms);
+  };
+  at(0, TestKeyPhase::kDown);
+  int64_t ms = 100;
+  for (int i = 0; i < repeats; ++i, ms += 50) {
+    at(ms, TestKeyPhase::kRepeat);
+  }
+  if (release) {
+    at(ms, TestKeyPhase::kUp);
+  }
+  CefPostDelayedTask(
+      TID_UI,
+      base::BindOnce(&CefBrowserClient::RunTestScript, this, browser, probe),
+      ms + probe_delay_ms);
+}
+
+void CefBrowserClient::RunTestScript(CefRefPtr<CefBrowser> browser,
+                                     const std::string& script) {
+  browser->GetMainFrame()->ExecuteJavaScript(script, "", 0);
 }
 
 // Each step waits for one event, then acts. Any page title showing a key the
@@ -831,7 +954,11 @@ void CefBrowserClient::KeySmokeStep(CefRefPtr<CefBrowser> browser,
   }
   // From step 7 on every key is a bound motion, so the page must see none.
   constexpr int kFirstScrollStep = 7;
+  constexpr int kHoldStep = 13;
   if (event == "title key:r:body" || event.starts_with("title key:Escape") ||
+      event == "title timeout:running" ||
+      (event.starts_with("title hold:") &&
+       event != "title hold:moved:stopped") ||
       (key_smoke_step_ >= kFirstScrollStep &&
        event.starts_with("title key:"))) {
     std::fprintf(stderr, "vrowser-smoke: keys failed, page saw %s\n",
@@ -867,7 +994,15 @@ void CefBrowserClient::KeySmokeStep(CefRefPtr<CefBrowser> browser,
       {"title scroll:bottom", "gg scrolls to the top", {kTestG, kTestG}, 2},
       {"title scroll:0", "d scrolls half a page down", {kTestD}, 1},
       {"title scroll:half", "u scrolls half a page up", {kTestU}, 1},
-      {"title scroll:0", "done", {}, 0},
+      {"title scroll:0",
+       "hold j: the page keeps scrolling, and stops on key-up",
+       {},
+       0},
+      {"title hold:moved:stopped",
+       "hold j with no key-up: the loop stops on its own",
+       {},
+       0},
+      {"title timeout:stopped", "done", {}, 0},
   };
   constexpr int kStepCount = static_cast<int>(std::size(kSteps));
   if (key_smoke_step_ >= kStepCount ||
@@ -888,15 +1023,34 @@ void CefBrowserClient::KeySmokeStep(CefRefPtr<CefBrowser> browser,
         "document.getElementById('f').focus()", "", 0);
     return;
   }
+  // The probes record scrollY, wait 300 ms, and report whether the page moved
+  // past the first step and whether it is still moving.
+  if (index == kHoldStep) {
+    SendTestHold(browser, kTestJ, 10, true, 100,
+                 "(() => { const y = scrollY; setTimeout(() => { "
+                 "document.title = 'hold:' + (y > 120 ? 'moved' : 'short') + "
+                 "':' + (scrollY === y ? 'stopped' : 'running'); }, 300); "
+                 "})();");
+    return;
+  }
+  if (index == kHoldStep + 1) {
+    // No key-up: wait past the loop's own deadline before probing.
+    SendTestHold(browser, kTestJ, 6, false, kHeldScrollTimeoutMs + 200,
+                 "(() => { const y = scrollY; setTimeout(() => { "
+                 "document.title = 'timeout:' + (scrollY === y ? 'stopped' : "
+                 "'running'); }, 300); })();");
+    return;
+  }
   // OnFocusedNodeChanged can arrive before the editor is ready to take a key.
   // Sending immediately is flaky on Linux: the event is forwarded but never
   // becomes a DOM keydown. A short delay after focus lets it settle.
   const int64_t delay_ms = index == 3 ? 200 : 0;
   for (int i = 0; i < step.key_count; ++i) {
-    CefPostDelayedTask(TID_UI,
-                       base::BindOnce(&CefBrowserClient::SendTestKey, this,
-                                      browser, step.keys[i]),
-                       delay_ms);
+    CefPostDelayedTask(
+        TID_UI,
+        base::BindOnce(&CefBrowserClient::SendTestKey, this, browser,
+                       step.keys[i], TestKeyPhase::kPress),
+        delay_ms);
   }
 }
 

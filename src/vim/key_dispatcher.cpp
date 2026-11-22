@@ -27,12 +27,15 @@ int ModifierCount(const Modifiers& modifiers) {
          (modifiers.meta ? 1 : 0) + (modifiers.shift ? 1 : 0);
 }
 
-void RememberPress(KeyInputState& state, const KeyEvent& event) {
+void RememberPress(KeyInputState& state,
+                   const KeyEvent& event,
+                   const std::optional<BindingAction>& action) {
   const bool already = std::any_of(
       state.consumed_keys.begin(), state.consumed_keys.end(),
       [&event](const ConsumedPress& press) { return SamePress(press, event); });
   if (!already) {
-    state.consumed_keys.push_back(ConsumedPress{event.key, event.modifiers});
+    state.consumed_keys.push_back(
+        ConsumedPress{event.key, event.modifiers, action, false});
   }
 }
 
@@ -77,7 +80,7 @@ KeyDispatch FinishDown(KeyInputState& state,
                        const KeyEvent& event,
                        KeyDispatch dispatch) {
   if (dispatch.disposition == KeyDisposition::kConsume) {
-    RememberPress(state, event);
+    RememberPress(state, event, dispatch.action);
     state.suppress_chars = true;
   } else {
     state.suppress_chars = false;
@@ -90,23 +93,34 @@ KeyDispatch DispatchKeyUp(KeyInputState& state, const KeyEvent& event) {
   if (it == state.consumed_keys.end()) {
     return KeyDispatch{};
   }
+  KeyDispatch dispatch = ConsumedResult();
+  if (it->holding) {
+    dispatch.hold = HoldEvent::kStop;
+    dispatch.held_action = it->action;
+  }
   state.consumed_keys.erase(it);
   if (state.consumed_keys.empty()) {
     state.suppress_chars = false;
   }
-  return ConsumedResult();
+  return dispatch;
 }
 
 KeyDispatch DispatchRepeat(KeyInputState& state, const KeyEvent& event) {
-  const bool held = std::any_of(
+  const auto it = std::find_if(
       state.consumed_keys.begin(), state.consumed_keys.end(),
       [&event](const ConsumedPress& press) { return SamePress(press, event); });
-  if (!held) {
+  if (it == state.consumed_keys.end()) {
     state.suppress_chars = false;
     return KeyDispatch{};
   }
   state.suppress_chars = true;
-  return ConsumedResult();
+  KeyDispatch dispatch = ConsumedResult();
+  if (it->action) {
+    dispatch.hold = it->holding ? HoldEvent::kContinue : HoldEvent::kStart;
+    dispatch.held_action = it->action;
+    it->holding = true;
+  }
+  return dispatch;
 }
 
 KeyDispatch DispatchNormal(const KeyBindings& bindings,
@@ -152,9 +166,11 @@ void TransferHeldKeys(KeyInputState& from, KeyInputState& to) {
     return;
   }
   for (const ConsumedPress& press : from.consumed_keys) {
-    const bool already =
-        std::find(to.consumed_keys.begin(), to.consumed_keys.end(), press) !=
-        to.consumed_keys.end();
+    const bool already = std::any_of(
+        to.consumed_keys.begin(), to.consumed_keys.end(),
+        [&press](const ConsumedPress& other) {
+          return other.key == press.key && other.modifiers == press.modifiers;
+        });
     if (!already) {
       to.consumed_keys.push_back(press);
     }

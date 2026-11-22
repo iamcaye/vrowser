@@ -251,5 +251,53 @@ TEST_F(KeyDispatcherTest, TransferToTheSameTabKeepsHeldKeys) {
   EXPECT_EQ(Send(Up("r")).disposition, KeyDisposition::kConsume);
 }
 
+TEST_F(KeyDispatcherTest, HoldingABoundKeyReportsStartContinueStop) {
+  const KeyDispatch down = Send(Down("r", U'r'));
+  ASSERT_TRUE(down.action.has_value());
+  EXPECT_EQ(down.hold, HoldEvent::kNone);
+
+  const KeyDispatch first = Send(RepeatDown("r", U'r'));
+  EXPECT_EQ(first.disposition, KeyDisposition::kConsume);
+  EXPECT_FALSE(first.action.has_value());
+  EXPECT_EQ(first.hold, HoldEvent::kStart);
+  ASSERT_TRUE(first.held_action.has_value());
+  EXPECT_EQ(first.held_action->command, "reload");
+
+  const KeyDispatch second = Send(RepeatDown("r", U'r'));
+  EXPECT_EQ(second.hold, HoldEvent::kContinue);
+  EXPECT_FALSE(second.action.has_value());
+
+  const KeyDispatch up = Send(Up("r"));
+  EXPECT_EQ(up.disposition, KeyDisposition::kConsume);
+  EXPECT_EQ(up.hold, HoldEvent::kStop);
+  ASSERT_TRUE(up.held_action.has_value());
+  EXPECT_EQ(up.held_action->command, "reload");
+}
+
+TEST_F(KeyDispatcherTest, ShortPressIsNotAHold) {
+  Send(Down("r", U'r'));
+  const KeyDispatch up = Send(Up("r"));
+  EXPECT_EQ(up.disposition, KeyDisposition::kConsume);
+  EXPECT_EQ(up.hold, HoldEvent::kNone);
+  EXPECT_FALSE(up.held_action.has_value());
+}
+
+TEST_F(KeyDispatcherTest, HeldPrefixKeyIsNotAHold) {
+  // `g` alone completes nothing, so holding it does not repeat anything.
+  Send(Down("g", U'g'));
+  const KeyDispatch repeat = Send(RepeatDown("g", U'g'));
+  EXPECT_EQ(repeat.disposition, KeyDisposition::kConsume);
+  EXPECT_EQ(repeat.hold, HoldEvent::kNone);
+  EXPECT_EQ(Send(Up("g")).hold, HoldEvent::kNone);
+}
+
+TEST_F(KeyDispatcherTest, HoldFollowsATabSwitch) {
+  Send(Down("r", U'r'));
+  Send(RepeatDown("r", U'r'));
+  KeyInputState other;
+  TransferHeldKeys(state_, other);
+  EXPECT_EQ(DispatchKey(bindings_, other, Up("r")).hold, HoldEvent::kStop);
+}
+
 }  // namespace
 }  // namespace vrowser
