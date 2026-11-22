@@ -49,5 +49,38 @@ TEST(ScrollScriptTest, TopAndBottomIgnoreCount) {
             std::string::npos);
 }
 
+TEST(HeldScrollTest, OnlyLineAndHalfPageAreContinuous) {
+  EXPECT_TRUE(IsContinuousMotion(ScrollMotion::kLineDown));
+  EXPECT_TRUE(IsContinuousMotion(ScrollMotion::kLineUp));
+  EXPECT_TRUE(IsContinuousMotion(ScrollMotion::kHalfPageDown));
+  EXPECT_TRUE(IsContinuousMotion(ScrollMotion::kHalfPageUp));
+  EXPECT_FALSE(IsContinuousMotion(ScrollMotion::kTop));
+  EXPECT_FALSE(IsContinuousMotion(ScrollMotion::kBottom));
+  EXPECT_TRUE(HeldScrollStartScript(ScrollMotion::kTop).empty());
+  EXPECT_TRUE(HeldScrollStartScript(ScrollMotion::kBottom).empty());
+}
+
+TEST(HeldScrollTest, StartScriptCarriesDirectionAndDeadline) {
+  const std::string down = HeldScrollStartScript(ScrollMotion::kLineDown);
+  EXPECT_NE(down.find("const v = 900;"), std::string::npos);
+  EXPECT_NE(down.find("performance.now() + 600"), std::string::npos);
+  EXPECT_NE(down.find("requestAnimationFrame"), std::string::npos);
+  EXPECT_NE(
+      HeldScrollStartScript(ScrollMotion::kLineUp).find("const v = -900;"),
+      std::string::npos);
+  EXPECT_NE(HeldScrollStartScript(ScrollMotion::kHalfPageUp)
+                .find("const v = -window.innerHeight * 2;"),
+            std::string::npos);
+}
+
+TEST(HeldScrollTest, KeepAliveAndStopTouchOnlyTheLoopState) {
+  EXPECT_EQ(HeldScrollKeepAliveScript(),
+            "(() => { const s = window.__vrowserHeldScroll; if (s) { s.until "
+            "= performance.now() + 600; } })();");
+  EXPECT_EQ(HeldScrollStopScript(),
+            "(() => { const s = window.__vrowserHeldScroll; if (s) { ++s.id; "
+            "} })();");
+}
+
 }  // namespace
 }  // namespace vrowser

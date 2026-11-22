@@ -45,4 +45,9 @@ void CefBrowserClient::PlatformShowWindow(CefRefPtr<CefBrowser> browser) {
   (void)browser;
 }
 
+void CefBrowserClient::PlatformWatchKeyUps(bool watch) {
+  // Key-ups of consumed key-downs reach OnPreKeyEvent here.
+  (void)watch;
+}
+
 }  // namespace vrowser

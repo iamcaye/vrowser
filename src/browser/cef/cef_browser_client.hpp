@@ -3,10 +3,12 @@
 
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <initializer_list>
 #include <list>
 #include <map>
+#include <optional>
 #include <string>
 
 #include "include/cef_client.h"
@@ -29,6 +31,14 @@ struct TestKey {
   int linux_key_code;
   char16_t character;
   bool shift = false;
+};
+
+// What a smoke test does with a key: a full press, or one part of a hold.
+enum class TestKeyPhase {
+  kPress,   // Key-down then key-up.
+  kDown,    // Key-down only.
+  kRepeat,  // An OS auto-repeat key-down.
+  kUp,      // Key-up only.
 };
 
 class CefBrowserClient : public CefClient,
@@ -98,15 +108,25 @@ class CefBrowserClient : public CefClient,
   // returns true once all of them are ready to be closed. UI thread.
   bool CanCloseWindow(CefRefPtr<CefWindow> window);
   bool IsClosing() const { return is_closing_; }
+  // A key-up seen by the platform before Chromium handles it. macOS drops
+  // the key-up of a key-down that OnPreKeyEvent consumed, so this is how a
+  // held scroll learns its key was released there. UI thread.
+  void OnNativeKeyUp(int native_key_code);
   int exit_code() const { return exit_code_; }
 
  private:
   void PlatformTitleChange(CefRefPtr<CefBrowser> browser,
                            const CefString& title);
   void PlatformShowWindow(CefRefPtr<CefBrowser> browser);
+  // macOS: installs (or removes) an app-local key-up monitor that calls
+  // OnNativeKeyUp. Other platforms deliver those key-ups to OnPreKeyEvent and
+  // do nothing here.
+  void PlatformWatchKeyUps(bool watch);
   // macOS only: delivers a synthesized NSEvent key-down and key-up to the
   // browser's window, which takes the same path as a typed key.
-  void PlatformSendTestKey(CefRefPtr<CefBrowser> browser, const TestKey& key);
+  void PlatformSendTestKey(CefRefPtr<CefBrowser> browser,
+                           const TestKey& key,
+                           TestKeyPhase phase);
   void LoadInMainFrame(const std::string& url);
   CefRefPtr<CefBrowser> FindBrowser(TabId id) const;
   CefRefPtr<CefBrowser> ActiveBrowser() const;
@@ -132,7 +152,25 @@ class CefBrowserClient : public CefClient,
   // Sets the window title from the active tab's current page.
   void ShowActiveTitle();
   void KeySmokeStep(CefRefPtr<CefBrowser> browser, const std::string& event);
-  void SendTestKey(CefRefPtr<CefBrowser> browser, TestKey key);
+  void SendTestKey(CefRefPtr<CefBrowser> browser,
+                   TestKey key,
+                   TestKeyPhase phase = TestKeyPhase::kPress);
+  // Key smoke: holds `key` for `repeats` OS repeats 50 ms apart, then
+  // releases it unless `release` is false, then runs `probe` in the page.
+  void SendTestHold(CefRefPtr<CefBrowser> browser,
+                    TestKey key,
+                    int repeats,
+                    bool release,
+                    int64_t probe_delay_ms,
+                    const std::string& probe);
+  void RunTestScript(CefRefPtr<CefBrowser> browser, const std::string& script);
+  // Starts, keeps alive, or stops held-key scrolling for a key that completed
+  // a scroll binding and is held down.
+  void HandleHold(CefRefPtr<CefBrowser> browser,
+                  const KeyDispatch& dispatch,
+                  int native_key_code);
+  // Ends a held-key scroll, if one runs. Safe to call at any time.
+  void StopHeldScroll();
   void RunBinding(CefRefPtr<CefBrowser> browser, const KeyDispatch& dispatch);
   void OnSmokeTimeout();
   void FinishSmoke(int code);
@@ -167,6 +205,14 @@ class CefBrowserClient : public CefClient,
   CommandRegistry commands_;
   // Set only while RunBinding runs a command. UI thread only.
   CefRefPtr<CefBrowser> key_target_;
+  // A held scroll key. One keyboard, so at most one. UI thread only.
+  struct HeldScroll {
+    TabId tab;
+    CefRefPtr<CefFrame> frame;
+    int native_key_code;
+    std::chrono::steady_clock::time_point last_keep_alive;
+  };
+  std::optional<HeldScroll> held_scroll_;
 
   IMPLEMENT_REFCOUNTING(CefBrowserClient);
 };

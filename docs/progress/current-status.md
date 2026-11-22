@@ -35,7 +35,8 @@ started.
   and Escape returns to Normal. Bindings: `r` reloads, `j`/`k` scroll a line
   step, `d`/`u` half a page, `gg`/`G` to the top and bottom of the focused
   frame. A count repeats `r` (`3r`) and multiplies a scroll step (`5j`).
-  OS key repeat does not.
+  OS key repeat does not repeat a binding; holding `j`, `k`, `d`, or `u`
+  keeps scrolling until the key is released.
   A main-frame load drops consumed key-up tracking, and editable focus clears
   a pending key sequence.
 - clang-format (C++ and Objective-C), clang-tidy config, editorconfig.
@@ -73,10 +74,11 @@ Clang 21.0.0, Ninja 1.13.2.
 | Relaunch with `--url=https://www.iana.org/help/example-domains` into a running app | `vrowser: load-end 200 https://www.iana.org/help/example-domains` in the first process |
 | `just tab-smoke` (`--vrowser-tab-smoke-test --use-alloy-style`) | `t` opened the second tab; `gt` wrapped to tab 1, `gT` wrapped to tab 2; `x` closed tab 2 (`vrowser-smoke: tabs ok, 1 open, remaining visible`); `x` on the last tab quit, exit 0 |
 | `--vrowser-tab-smoke-test` in Chrome style | `vrowser: tabs need --use-alloy-style`, exit 1 (second Chrome-style browser view is never created) |
-| `just key-smoke` (`--vrowser-key-smoke-test`, Chrome style) | unbound `q` reached the page, `r` ran `reload` and did not, focused field selected Insert, Escape returned to Normal and did not reach the page; `j` 60, `3j` 240, `k` 180, `G` bottom, `gg` 0, `d` half a viewport, `u` 0, no motion key reached the page; `vrowser-smoke: keys ok`, exit 0 |
+| `just key-smoke` (`--vrowser-key-smoke-test`, Chrome style) | unbound `q` reached the page, `r` ran `reload` and did not, focused field selected Insert, Escape returned to Normal and did not reach the page; `j` 60, `3j` 240, `k` 180, `G` bottom, `gg` 0, `d` half a viewport, `u` 0, no motion key reached the page; held `j` kept scrolling and stopped on key-up, held `j` with no key-up stopped on its own; `vrowser-smoke: keys ok`, exit 0 (three runs) |
 | `--vrowser-key-smoke-test --use-alloy-style` | not supported: synthesized keys never reach Alloy pages, even without a keyboard handler; exits 1 with a message |
 | Real keyboard, Chrome style and `--use-alloy-style` (manual, `https://duckduckgo.com`) | `r` reloads and stays out of the page, a focused field selects Insert and types `r`, Escape returns to Normal and does not reach the field, the next `r` reloads; `3r` reloads three times; a held `r` reloads once; Cmd+L and unbound keys still reach the browser and page |
 | Scroll bindings, real keyboard, Chrome style and `--use-alloy-style` (manual, long Wikipedia page) | `j`/`k` move a line step, `5j` five steps, `d`/`u` half a page, `G` bottom, `gg` top; `j` in a focused field types and does not scroll, and scrolls again after Escape |
+| Held scroll, real keyboard, Chrome style and `--use-alloy-style` (manual, long page) | held `j`/`k`/`d`/`u` scroll continuously and stop on release; a short `j` moves one step; held `r` reloads once; Cmd+Tab away while holding `j` stops within a second |
 | Chrome-style smoke (`--vrowser-smoke-test`) | exit 0, `vrowser-smoke: ok 200` |
 | Alloy-style smoke (`--use-alloy-style --vrowser-smoke-test`) | exit 0, `vrowser-smoke: ok 200` |
 | `https://expired.badssl.com/` Chrome style | Chromium keeps the error UI; no client data URL |
@@ -114,6 +116,9 @@ checked on this branch after the key-dispatch fixes:
   style after the UI gaps listed in
   [runtime-style.md](../architecture/runtime-style.md) are closed.
 - No tab strip, command line, history, or bookmarks.
+- On macOS a key-down consumed in `OnPreKeyEvent` never gets its key-up
+  there; a held scroll is stopped by an `NSEvent` key-up monitor, and other
+  consumed key-ups are dropped from tracking on the next press.
 - Scrolling moves the focused frame's document. A page that scrolls an inner
   element instead of the document does not move, and a focused iframe that
   cannot scroll does not hand the motion to its parent.
@@ -142,4 +147,4 @@ Alloy's client-owned prompt path.
 
 ## Recommended next task
 
-[Keep scrolling while a motion key is held](https://github.com/iamcaye/vrowser/issues/55).
+[Animate scroll motions](https://github.com/iamcaye/vrowser/issues/56).
