@@ -13,9 +13,10 @@ namespace vrowser {
 // routed to CefBrowserClient so every browser in the window closes cleanly.
 //
 // With `status_bar`, the tabs go in a panel above a one-line, read-only
-// status bar, which is handed to CefBrowserClient::AttachStatusBar. Tab views
-// are always children of one panel (the window itself without a status bar),
-// so callers add and remove them through the view's parent.
+// status bar, which is handed to CefBrowserClient::AttachStatusBar, with a
+// hidden command line between them (CefBrowserClient::AttachCommandLine). Tab
+// views are always children of one panel (the window itself without a status
+// bar), so callers add and remove them through the view's parent.
 CefRefPtr<CefWindowDelegate> CreateWindowDelegate(
     CefRefPtr<CefBrowserView> browser_view,
     cef_runtime_style_t runtime_style,

@@ -32,6 +32,12 @@ TEST(KeyNotationTest, PrintableCharacters) {
   EXPECT_EQ(KeyNotation(Key("e", char32_t{0xE9})), "\xC3\xA9");
 }
 
+TEST(KeyNotationTest, ShiftedPunctuationUsesTheTypedCharacter) {
+  EXPECT_EQ(KeyNotation(Key(";", U':', {.shift = true})), ":");
+  EXPECT_EQ(KeyNotation(Key(".", U':', {.shift = true})), ":");  // Spanish.
+  EXPECT_EQ(KeyNotation(Key("/", U'/')), "/");
+}
+
 TEST(KeyNotationTest, LettersWithoutCharacterUseKeyIdentity) {
   // Windows raw key-downs carry no character.
   EXPECT_EQ(KeyNotation(Key("j", 0)), "j");

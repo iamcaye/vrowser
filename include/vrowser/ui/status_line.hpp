@@ -20,6 +20,9 @@ struct StatusLineInput {
   Mode mode{Mode::kNormal};
   bool loading{false};
   KeySequenceState pending;
+  // A shell message, such as a command error. Shown after the URL; the URL
+  // keeps at least its scheme and host.
+  std::string message;
 };
 
 // "NORMAL", "INSERT", "COMMAND", or "HINT".
@@ -43,8 +46,9 @@ std::string PendingKeys(const KeySequenceState& pending);
 // is not shown as a familiar name.
 std::string ShortenUrl(std::string_view url, size_t max_chars);
 
-// One status line: mode, pending keys, the shortened URL, and "loading" while
-// the page loads, fitted to `max_chars` where the host allows it.
+// One status line: mode, pending keys, the shortened URL, "loading" while the
+// page loads, and any message, fitted to `max_chars` where the host allows
+// it.
 std::string FormatStatusLine(const StatusLineInput& input, size_t max_chars);
 
 }  // namespace vrowser

@@ -9,6 +9,7 @@ namespace vrowser {
 
 // Built-in Normal-mode bindings:
 //
+//   :   command-line             open the command line (Command mode)
 //   r   reload
 //   j   scroll-down              one line step, times the count
 //   k   scroll-up                one line step, times the count

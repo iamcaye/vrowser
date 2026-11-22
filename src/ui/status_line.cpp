@@ -82,7 +82,10 @@ std::string FormatStatusLine(const StatusLineInput& input, size_t max_chars) {
   if (!pending.empty()) {
     prefix += pending + "  ";
   }
-  const std::string suffix = input.loading ? "  loading" : "";
+  std::string suffix = input.loading ? "  loading" : "";
+  if (!input.message.empty()) {
+    suffix += "  | " + input.message;
+  }
   const size_t fixed = prefix.size() + suffix.size();
   const size_t url_budget = max_chars > fixed ? max_chars - fixed : 0;
   return prefix + ShortenUrl(input.url, url_budget) + suffix;

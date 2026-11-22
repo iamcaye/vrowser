@@ -36,6 +36,10 @@ started.
   and a long URL is cut from the end of the path, never through the host.
   Chrome style keeps Chromium's toolbar instead. Popup windows have no status
   bar yet.
+- Command line in the Alloy main window: `:` opens it in Command mode, Enter
+  runs the line through the command registry, Escape or losing focus cancels.
+  Errors show in the status bar. `:open <url>` loads a URL in the current
+  tab.
 - Normal and Insert modes in the window: Normal-mode bindings are consumed
   before the page sees them, a focused text field switches the tab to Insert,
   and Escape returns to Normal. Bindings: `r` reloads, `j`/`k` scroll a line
@@ -80,7 +84,7 @@ Clang 21.0.0, Ninja 1.13.2.
 | CEF macOS arm64 archive SHA256 | `22a510e5d348a907953278b618e1e9e442ccf78773b9fee0e09eaf154eef53b0` |
 | Smoke test, sandbox left on | `https://example.com` main frame HTTP 200, process exit 0 |
 | Relaunch with `--url=https://www.iana.org/help/example-domains` into a running app | `vrowser: load-end 200 https://www.iana.org/help/example-domains` in the first process |
-| `just tab-smoke` (`--vrowser-tab-smoke-test --use-alloy-style`) | status bar showed `NORMAL  https://example.com/  loading` on both tabs; `t` opened the second tab; `gt` wrapped to tab 1, `gT` wrapped to tab 2; `x` closed tab 2 (`vrowser-smoke: tabs ok, 1 open, remaining visible`); `x` on the last tab quit, exit 0 |
+| `just tab-smoke` (`--vrowser-tab-smoke-test --use-alloy-style`) | status bar showed `NORMAL  https://example.com/  loading` on both tabs; `t` opened the second tab; `gt` wrapped to tab 1, `gT` wrapped to tab 2; `x` closed tab 2 (`vrowser-smoke: tabs ok, 1 open, remaining visible`); macOS command line: `:nope` reported `Unknown command: nope`, `:` + Escape ran nothing, `:open https://example.org/` loaded it and the bar showed it; `x` on the last tab quit, exit 0 (11 runs) |
 | `--vrowser-tab-smoke-test` in Chrome style | `vrowser: tabs need --use-alloy-style`, exit 1 (second Chrome-style browser view is never created) |
 | `just key-smoke` (`--vrowser-key-smoke-test`, Chrome style) | unbound `q` reached the page, `r` ran `reload` and did not, focused field selected Insert, Escape returned to Normal and did not reach the page; `j` 60, `3j` 240, `k` 180, `G` bottom, `gg` 0, `d` half a viewport, `u` 0, no motion key reached the page; `jjj` typed quickly ended at 180 like `3j`, held `j` kept scrolling and stopped on key-up, held `j` with no key-up stopped on its own, `H` went back from a second page, `H` at the start did nothing, `L` went forward; `vrowser-smoke: keys ok`, exit 0 (three runs) |
 | `--vrowser-key-smoke-test --use-alloy-style` | not supported: synthesized keys never reach Alloy pages, even without a keyboard handler; exits 1 with a message |
@@ -126,7 +130,9 @@ checked on this branch after the key-dispatch fixes:
 - Chrome style shows Chromium's toolbar. The Vim shell should move to Alloy
   style after the UI gaps listed in
   [runtime-style.md](../architecture/runtime-style.md) are closed.
-- No tab strip, command line, history, or bookmarks.
+- No tab strip, history, or bookmarks.
+- On Windows a raw key-down for Shift+`;` has no character, so `:` may not
+  match there; not run.
 - The status bar's character budget assumes about 7 px per character of a
   12 px monospace font; it is recomputed on every update, not on resize.
 - On macOS a key-down consumed in `OnPreKeyEvent` never gets its key-up
@@ -160,5 +166,4 @@ Alloy's client-owned prompt path.
 
 ## Recommended next task
 
-[Show command mode](https://github.com/iamcaye/vrowser/issues/21), which
-unblocks `:open` (#64). It still needs the `agent-ready` label.
+[Open a URL or search from the command line](https://github.com/iamcaye/vrowser/issues/64).

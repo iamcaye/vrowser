@@ -52,6 +52,23 @@ client registers `reload` and the scroll commands; `AddDefaultBindings` in
 command is repeated (`3r`). `--url` is a process switch parsed in
 `src/core`, not a command.
 
+The command line (Alloy main window) opens with `:` in Normal mode: the tab
+enters Command mode and a one-line `CefTextfield` above the status bar takes
+focus. Enter runs the line through `CommandRegistry::Execute`; Escape, or
+focus leaving the line, closes it without running anything. Either way the
+tab returns to Normal and the page gets focus back. An error such as
+`Unknown command: foo` is shown in the status bar after the URL until the
+next key press. `open <url>` loads a URL in the current tab through
+`NavigationController`, which rejects empty and `javascript:` URLs; turning
+text into a URL or a search is #64. Chrome style has no command line yet.
+
+Punctuation keys (Windows OEM virtual keys) are named by their US-layout
+character without Shift (`;`), and the binding notation uses the typed
+character, so Shift+`;` on a US layout and Shift+`.` on a Spanish layout
+both match `:`. Before this, those keys had no identity and were dropped.
+A Windows raw key-down carries no character, so there `:` would read as
+`<S-;>`; Windows has not been run.
+
 ## Hints
 
 Hint mode labels visible links in the focused frame and in child frames that
