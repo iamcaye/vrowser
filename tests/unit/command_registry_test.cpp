@@ -111,5 +111,48 @@ TEST(CommandRegistryTest, ContainsReportsRegistration) {
   EXPECT_TRUE(registry.Contains("open"));
 }
 
+TEST(CommandRegistryTest, RunRepeatsWhenACountIsPassed) {
+  CommandRegistry registry;
+  int calls = 0;
+  registry.Register("reload", "Reload the page", [&calls](const Args&) {
+    ++calls;
+    return CommandResult::Ok();
+  });
+
+  EXPECT_TRUE(registry.Run("reload", {}, 3, true).ok());
+  EXPECT_EQ(calls, 3);
+
+  calls = 0;
+  EXPECT_TRUE(registry.Run("reload", {}).ok());
+  EXPECT_EQ(calls, 1);
+  EXPECT_TRUE(registry.Run("reload", {}, 4, false).ok());
+  EXPECT_EQ(calls, 2);
+}
+
+TEST(CommandRegistryTest, RunStopsRepeatingAfterAnError) {
+  CommandRegistry registry;
+  int calls = 0;
+  registry.Register("reload", "Reload the page", [&calls](const Args&) {
+    ++calls;
+    return calls == 1 ? CommandResult::Ok() : CommandResult::Error("stop");
+  });
+  const CommandResult result = registry.Run("reload", {}, 3, true);
+  EXPECT_FALSE(result.ok());
+  EXPECT_EQ(result.error(), "stop");
+  EXPECT_EQ(calls, 2);
+}
+
+TEST(CommandRegistryTest, RunByNameUsesArguments) {
+  CommandRegistry registry;
+  Args received;
+  registry.Register("open", "Open a URL", [&received](const Args& args) {
+    received = args;
+    return CommandResult::Ok();
+  });
+  EXPECT_TRUE(registry.Run("open", {"a b"}).ok());
+  EXPECT_EQ(received, Args{"a b"});
+  EXPECT_EQ(registry.Run("missing", {}).error(), "Unknown command: missing");
+}
+
 }  // namespace
 }  // namespace vrowser

@@ -1,5 +1,6 @@
 add_library(vrowser_vim STATIC
   key_bindings.cpp
+  key_dispatcher.cpp
   key_event.cpp
   mode_machine.cpp)
 target_include_directories(vrowser_vim PUBLIC

@@ -1,6 +1,6 @@
 # Current status
 
-Updated: 2026-11-19
+Updated: 2026-11-22
 
 ## Milestone
 
@@ -23,12 +23,18 @@ started.
   headers.
 - GoogleTest tests for startup switches, the command registry, mode
   transitions, key normalization, key bindings, counts, navigation
-  requests, and the tab list.
+  requests, the tab list, and key dispatch.
 - A second launch with `--url` loads that URL in the running window.
 - Core `TabList` and tabs in the main window (Alloy style only): each tab is a
   browser view under a fill layout, only the active one is visible, closing a
   tab removes its view, and closing the last tab quits. No tab strip or keys
   yet.
+- Normal and Insert modes in the window: Normal-mode bindings are consumed
+  before the page sees them, a focused text field switches the tab to Insert,
+  and Escape returns to Normal. One binding so far: `r` reloads. A count
+  repeats the command (`3r` reloads three times). OS key repeat does not.
+  A main-frame load drops consumed key-up tracking, and editable focus clears
+  a pending key sequence.
 - clang-format (C++ and Objective-C), clang-tidy config, editorconfig.
 - GitHub Actions workflow that runs the unit tests on Linux, macOS, and
   Windows. Run [44557827020](https://github.com/iamcaye/vrowser/actions/runs/44557827020)
@@ -56,7 +62,7 @@ Clang 21.0.0, Ninja 1.13.2.
 
 | Check | Result |
 | --- | --- |
-| `cmake --preset ci && cmake --build --preset ci && ctest --preset ci` | 82 tests passed |
+| `cmake --preset ci && cmake --build --preset ci && ctest --preset ci` | 95 tests passed |
 | `ctest --test-dir build/debug` | 9 tests passed (older local debug tree) |
 | `cmake --preset debug && cmake --build --preset debug` | Built `Vrowser.app` and five helper bundles |
 | CEF macOS arm64 archive SHA256 | `22a510e5d348a907953278b618e1e9e442ccf78773b9fee0e09eaf154eef53b0` |
@@ -64,6 +70,9 @@ Clang 21.0.0, Ninja 1.13.2.
 | Relaunch with `--url=https://www.iana.org/help/example-domains` into a running app | `vrowser: load-end 200 https://www.iana.org/help/example-domains` in the first process |
 | `just tab-smoke` (`--vrowser-tab-smoke-test --use-alloy-style`) | two tabs loaded, first closed, `vrowser-smoke: tabs ok, 1 open, remaining visible`, exit 0 |
 | `--vrowser-tab-smoke-test` in Chrome style | `vrowser: tabs need --use-alloy-style`, exit 1 (second Chrome-style browser view is never created) |
+| `just key-smoke` (`--vrowser-key-smoke-test`, Chrome style) | unbound `x` reached the page, `r` ran `reload` and did not, focused field selected Insert, Escape returned to Normal and did not reach the page; `vrowser-smoke: keys ok`, exit 0 |
+| `--vrowser-key-smoke-test --use-alloy-style` | not supported: synthesized keys never reach Alloy pages, even without a keyboard handler; exits 1 with a message |
+| Real keyboard, Chrome style and `--use-alloy-style` (manual, `https://duckduckgo.com`) | `r` reloads and stays out of the page, a focused field selects Insert and types `r`, Escape returns to Normal and does not reach the field, the next `r` reloads; `3r` reloads three times; a held `r` reloads once; Cmd+L and unbound keys still reach the browser and page |
 | Chrome-style smoke (`--vrowser-smoke-test`) | exit 0, `vrowser-smoke: ok 200` |
 | Alloy-style smoke (`--use-alloy-style --vrowser-smoke-test`) | exit 0, `vrowser-smoke: ok 200` |
 | `https://expired.badssl.com/` Chrome style | Chromium keeps the error UI; no client data URL |
@@ -77,8 +86,19 @@ Clang 21.0.0, Ninja 1.13.2.
 The passing smoke command was `tools/smoke_test.sh` after the macOS keychain
 permission was available. It did not pass `--use-mock-keychain`.
 
-Linux and Windows CEF CI workflows are on `main`. Graphical smoke was not run
-on either host.
+Linux and Windows CEF CI workflows are on `main`.
+
+Linux desktop (Ubuntu 24.04, x86_64, Clang 18, CEF 156 linux64, sandbox on),
+checked on this branch after the key-dispatch fixes:
+
+| Check | Result |
+| --- | --- |
+| `just test` | 107 tests passed |
+| `just smoke` | exit 0, `vrowser-smoke: ok 200 https://example.com/` |
+| `just tab-smoke` | exit 0, `vrowser-smoke: tabs ok, 1 open, remaining visible` |
+| `just key-smoke` | exit 0, `vrowser-smoke: keys ok` (Chrome style, synthesized keys) |
+| Real X11 keys, Chrome style and `--use-alloy-style` | `r` reloads and stays out of the page, `x` reaches the page, a focused field types `r` including keyup, Escape does not reach the page, the next `r` reloads |
+| Held `r` in Normal mode for half a second | one `vrowser: command reload` |
 
 ## Known limitations
 
@@ -107,13 +127,12 @@ Vim shell. Details in
 
 ## Next unblocked work
 
-The pure Vim input layer (#14, #15, #16, #17), navigation in the open window
-(#12), and tabs for Alloy style (#13) are in place. Normal and Insert in the
-window (#18) is unblocked. Keyboard tab switching (#32) follows. Chrome style
-still hosts one browser per window. Permission handling should follow Alloy's
-client-owned prompt path.
+Normal and Insert modes work in the window (#18). Scrolling from Normal mode
+(#19) adds the first real bindings. Following focus into iframes (#23) and
+keyboard tab switching (#32) build on the same dispatcher. Real typing was
+checked by hand on macOS in both Chrome and Alloy styles. Permission handling should follow
+Alloy's client-owned prompt path.
 
 ## Recommended next task
 
-[Implement Normal and Insert modes in the window](https://github.com/iamcaye/vrowser/issues/18)
-(`priority:p0`).
+[Scroll the page from Normal mode](https://github.com/iamcaye/vrowser/issues/19).

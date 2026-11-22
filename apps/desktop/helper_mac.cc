@@ -1,6 +1,7 @@
 // Copyright 2026 The Vrowser Authors
 // SPDX-License-Identifier: Apache-2.0
 
+#include "browser/cef/cef_renderer_app.hpp"
 #include "include/cef_app.h"
 #include "include/wrapper/cef_library_loader.h"
 
@@ -22,5 +23,6 @@ int main(int argc, char* argv[]) {
   }
 
   CefMainArgs main_args(argc, argv);
-  return CefExecuteProcess(main_args, nullptr, nullptr);
+  CefRefPtr<CefApp> app(new vrowser::CefRendererApp());
+  return CefExecuteProcess(main_args, app, nullptr);
 }
