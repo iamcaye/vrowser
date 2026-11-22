@@ -18,6 +18,9 @@ bool AddDefaultBindings(KeyBindings& bindings) {
       {"u", "scroll-half-page-up"},
       {"gg", "scroll-to-top"},
       {"G", "scroll-to-bottom"},
+      {"gt", "tab-next"},
+      {"gT", "tab-previous"},
+      {"x", "tab-close"},
   };
   bool ok = true;
   for (const Entry& entry : kDefaults) {

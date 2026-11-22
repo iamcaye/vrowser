@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <cstdint>
+#include <initializer_list>
 #include <list>
 #include <map>
 #include <string>
@@ -19,6 +21,15 @@
 #include "vrowser/vim/key_dispatcher.hpp"
 
 namespace vrowser {
+
+// A key a smoke test types, with its code on each platform.
+struct TestKey {
+  int windows_key_code;
+  int mac_key_code;
+  int linux_key_code;
+  char16_t character;
+  bool shift = false;
+};
 
 class CefBrowserClient : public CefClient,
                          public CefDisplayHandler,
@@ -93,15 +104,6 @@ class CefBrowserClient : public CefClient,
   void PlatformTitleChange(CefRefPtr<CefBrowser> browser,
                            const CefString& title);
   void PlatformShowWindow(CefRefPtr<CefBrowser> browser);
-  // A key the key smoke test types, with its code on each platform.
-  struct TestKey {
-    int windows_key_code;
-    int mac_key_code;
-    int linux_key_code;
-    char16_t character;
-    bool shift = false;
-  };
-
   // macOS only: delivers a synthesized NSEvent key-down and key-up to the
   // browser's window, which takes the same path as a typed key.
   void PlatformSendTestKey(CefRefPtr<CefBrowser> browser, const TestKey& key);
@@ -114,11 +116,21 @@ class CefBrowserClient : public CefClient,
   // Shows the active tab's view and hides the other tabs' views.
   void ShowActiveTab();
   void TabSmokeLoadEnd(CefRefPtr<CefBrowser> browser);
+  void TabSmokeActivated(TabId id);
   void TabSmokeClosed(TabId id);
+  // Types `keys` into `browser`, in order, from UI tasks.
+  void SendTestKeys(CefRefPtr<CefBrowser> browser,
+                    std::initializer_list<TestKey> keys,
+                    int64_t delay_ms = 0);
   void RegisterCommands();
   // Scrolls the focused frame of CommandBrowser(), or its main frame when no
   // frame has focus.
   void ScrollFocusedFrame(ScrollMotion motion, int count);
+  // Moves `steps` tabs right (positive) or left (negative) from the active
+  // tab, wrapping, and shows and focuses the new tab.
+  void SwitchTab(int steps);
+  // Sets the window title from the active tab's current page.
+  void ShowActiveTitle();
   void KeySmokeStep(CefRefPtr<CefBrowser> browser, const std::string& event);
   void SendTestKey(CefRefPtr<CefBrowser> browser, TestKey key);
   void RunBinding(CefRefPtr<CefBrowser> browser, const KeyDispatch& dispatch);
@@ -131,10 +143,10 @@ class CefBrowserClient : public CefClient,
   const bool key_smoke_test_;
   // Key smoke: index of the step waiting for its event. See KeySmokeStep.
   int key_smoke_step_ = 0;
-  // Tab smoke: 0 waits for the first load, 1 for the second tab's load, 2 for
-  // the first tab to close.
+  // Tab smoke stage. See TabSmokeLoadEnd.
   int tab_smoke_stage_ = 0;
   TabId tab_smoke_first_ = 0;
+  TabId tab_smoke_second_ = 0;
   bool smoke_timer_armed_ = false;
   bool smoke_finished_ = false;
   int exit_code_ = 0;

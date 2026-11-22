@@ -223,5 +223,33 @@ TEST_F(KeyDispatcherTest, CommandAndHintOnlyHandleEscape) {
   EXPECT_EQ(state_.mode.mode(), Mode::kNormal);
 }
 
+TEST_F(KeyDispatcherTest, HeldKeysFollowATabSwitch) {
+  // `g` then `t` switch tabs on the key-down of `t`; its key-up arrives in
+  // the new tab.
+  EXPECT_EQ(Send(Down("g", U'g')).disposition, KeyDisposition::kConsume);
+  EXPECT_EQ(Send(Up("g")).disposition, KeyDisposition::kConsume);
+  EXPECT_EQ(Send(Down("r", U'r')).disposition, KeyDisposition::kConsume);
+
+  KeyInputState other;
+  TransferHeldKeys(state_, other);
+  EXPECT_TRUE(state_.consumed_keys.empty());
+  EXPECT_FALSE(state_.suppress_chars);
+  EXPECT_TRUE(other.suppress_chars);
+
+  EXPECT_EQ(DispatchKey(bindings_, other, CharOnly(U'r')).disposition,
+            KeyDisposition::kConsume);
+  EXPECT_EQ(DispatchKey(bindings_, other, Up("r")).disposition,
+            KeyDisposition::kConsume);
+  EXPECT_TRUE(other.consumed_keys.empty());
+  // The old tab no longer swallows that key-up.
+  EXPECT_EQ(Send(Up("r")).disposition, KeyDisposition::kForward);
+}
+
+TEST_F(KeyDispatcherTest, TransferToTheSameTabKeepsHeldKeys) {
+  Send(Down("r", U'r'));
+  TransferHeldKeys(state_, state_);
+  EXPECT_EQ(Send(Up("r")).disposition, KeyDisposition::kConsume);
+}
+
 }  // namespace
 }  // namespace vrowser

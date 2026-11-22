@@ -33,9 +33,17 @@ class TabList {
   // Makes `id` active. Returns false when absent.
   bool Activate(TabId id);
 
+  // Moves the active tab `steps` places right (Next) or left (Previous),
+  // wrapping past either end. A step count below 1 counts as 1. Returns the
+  // new active tab, or nothing when the list is empty.
+  std::optional<TabId> ActivateNext(int steps = 1);
+  std::optional<TabId> ActivatePrevious(int steps = 1);
+
  private:
   std::vector<TabId> tabs_;
   std::optional<TabId> active_;
+
+  std::optional<TabId> ActivateOffset(std::ptrdiff_t offset);
 };
 
 }  // namespace vrowser

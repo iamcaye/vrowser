@@ -89,3 +89,10 @@ create more than one tab and can report frame focus.
   frame, or the main frame when none has focus. It scrolls the frame's
   document, so a page that scrolls an inner element instead (some web apps)
   does not move yet.
+- Tab keys: `gt` and `gT` move to the next and previous tab and wrap; a count
+  moves that many tabs (`3gt`). `x` closes the tab whose key ran it; closing
+  the last tab quits. The tab that becomes active gets keyboard focus and the
+  window title, and a key still held across the switch keeps its key-up out
+  of the new page (`TransferHeldKeys`). Only the active tab sets the window
+  title. Several tabs need Alloy style; in Chrome style `gt`/`gT` stay on the
+  one tab and `x` quits.

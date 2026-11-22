@@ -147,6 +147,23 @@ void NoteEditableFocus(KeyInputState& state, bool editable) {
   state.sequence = KeySequenceState{};
 }
 
+void TransferHeldKeys(KeyInputState& from, KeyInputState& to) {
+  if (&from == &to) {
+    return;
+  }
+  for (const ConsumedPress& press : from.consumed_keys) {
+    const bool already =
+        std::find(to.consumed_keys.begin(), to.consumed_keys.end(), press) !=
+        to.consumed_keys.end();
+    if (!already) {
+      to.consumed_keys.push_back(press);
+    }
+  }
+  to.suppress_chars = to.suppress_chars || from.suppress_chars;
+  from.consumed_keys.clear();
+  from.suppress_chars = false;
+}
+
 void NoteNavigation(KeyInputState& state) {
   state.consumed_keys.clear();
   state.suppress_chars = false;
