@@ -20,6 +20,7 @@ bool AddDefaultBindings(KeyBindings& bindings) {
       {"G", "scroll-to-bottom"},
       {"gt", "tab-next"},
       {"gT", "tab-previous"},
+      {"t", "tab-new"},
       {"x", "tab-close"},
   };
   bool ok = true;

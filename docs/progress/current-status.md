@@ -27,8 +27,9 @@ started.
 - A second launch with `--url` loads that URL in the running window.
 - Core `TabList` and tabs in the main window (Alloy style only): each tab is a
   browser view under a fill layout, only the active one is visible, closing a
-  tab removes its view, and closing the last tab quits. `gt`/`gT` switch
-  tabs and wrap, `x` closes the current tab. No tab strip yet.
+  tab removes its view, and closing the last tab quits. `t` opens a tab
+  with the start page, `gt`/`gT` switch tabs and wrap, `x` closes the current
+  tab. No tab strip yet.
 - Normal and Insert modes in the window: Normal-mode bindings are consumed
   before the page sees them, a focused text field switches the tab to Insert,
   and Escape returns to Normal. Bindings: `r` reloads, `j`/`k` scroll a line
@@ -70,7 +71,7 @@ Clang 21.0.0, Ninja 1.13.2.
 | CEF macOS arm64 archive SHA256 | `22a510e5d348a907953278b618e1e9e442ccf78773b9fee0e09eaf154eef53b0` |
 | Smoke test, sandbox left on | `https://example.com` main frame HTTP 200, process exit 0 |
 | Relaunch with `--url=https://www.iana.org/help/example-domains` into a running app | `vrowser: load-end 200 https://www.iana.org/help/example-domains` in the first process |
-| `just tab-smoke` (`--vrowser-tab-smoke-test --use-alloy-style`) | two tabs loaded; `gt` wrapped to tab 1, `gT` wrapped to tab 2; `x` closed tab 2 (`vrowser-smoke: tabs ok, 1 open, remaining visible`); `x` on the last tab quit, exit 0 |
+| `just tab-smoke` (`--vrowser-tab-smoke-test --use-alloy-style`) | `t` opened the second tab; `gt` wrapped to tab 1, `gT` wrapped to tab 2; `x` closed tab 2 (`vrowser-smoke: tabs ok, 1 open, remaining visible`); `x` on the last tab quit, exit 0 |
 | `--vrowser-tab-smoke-test` in Chrome style | `vrowser: tabs need --use-alloy-style`, exit 1 (second Chrome-style browser view is never created) |
 | `just key-smoke` (`--vrowser-key-smoke-test`, Chrome style) | unbound `q` reached the page, `r` ran `reload` and did not, focused field selected Insert, Escape returned to Normal and did not reach the page; `j` 60, `3j` 240, `k` 180, `G` bottom, `gg` 0, `d` half a viewport, `u` 0, no motion key reached the page; `vrowser-smoke: keys ok`, exit 0 |
 | `--vrowser-key-smoke-test --use-alloy-style` | not supported: synthesized keys never reach Alloy pages, even without a keyboard handler; exits 1 with a message |
@@ -134,7 +135,7 @@ Vim shell. Details in
 ## Next unblocked work
 
 Normal and Insert modes work in the window (#18), Normal mode scrolls the
-page (#19), and `gt`/`gT`/`x` switch and close tabs (#32). Following focus into iframes (#23) builds on
+page (#19), and `t`/`gt`/`gT`/`x` open, switch, and close tabs (#32, #58). Following focus into iframes (#23) builds on
 the same dispatcher. Real typing was
 checked by hand on macOS in both Chrome and Alloy styles. Permission handling should follow
 Alloy's client-owned prompt path.

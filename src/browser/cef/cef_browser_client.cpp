@@ -85,6 +85,7 @@ std::string DataUri(const std::string& data, const std::string& mime_type) {
 
 CefBrowserClient::CefBrowserClient(const StartupConfig& config)
     : alloy_style_(config.alloy_style),
+      new_tab_url_(config.initial_url),
       smoke_test_(config.smoke_test),
       tab_smoke_test_(config.tab_smoke_test),
       key_smoke_test_(config.key_smoke_test),
@@ -142,6 +143,12 @@ void CefBrowserClient::RegisterCommands() {
                             "Show the previous tab, wrapping to the last",
                             [this](const std::vector<std::string>&, int count) {
                               SwitchTab(-count);
+                              return CommandResult::Ok();
+                            });
+  // Counted so that `3t` opens one tab, like `3x` below.
+  commands_.RegisterCounted("tab-new", "Open a new tab with the start page",
+                            [this](const std::vector<std::string>&, int) {
+                              OpenTab(new_tab_url_);
                               return CommandResult::Ok();
                             });
   // Counted so that `3x` closes one tab instead of asking the same browser to
@@ -322,8 +329,16 @@ void CefBrowserClient::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
            browser->GetHost()->GetRuntimeStyle());
   browsers_.push_back(browser);
   if (!browser->IsPopup()) {
-    tabs_.Append(browser->GetIdentifier());
+    const std::optional<TabId> previous = tabs_.active();
+    const TabId id = browser->GetIdentifier();
+    tabs_.Append(id);
     ShowActiveTab();
+    if (previous) {
+      // A new tab next to others (`t`): it takes focus, and the key that
+      // opened it, if still down, has its key-up consumed here.
+      TransferHeldKeys(key_inputs_[*previous], key_inputs_[id]);
+      browser->GetHost()->SetFocus(true);
+    }
   }
 
   if (smoke_test_ && !smoke_timer_armed_) {
@@ -626,7 +641,7 @@ void CefBrowserClient::ShowActiveTab() {
 }
 
 // Tab smoke stages:
-//   0  wait for the first tab's load, then open a second tab.
+//   0  wait for the first tab's load, then type `t` to open a second tab.
 //   1  wait for the second tab's load, then type `gt` in it.
 //   2  `gt` wrapped to the first tab; type `gT`.
 //   3  `gT` wrapped to the second tab; type `x`.
@@ -638,7 +653,7 @@ void CefBrowserClient::TabSmokeLoadEnd(CefRefPtr<CefBrowser> browser) {
   if (tab_smoke_stage_ == 0) {
     tab_smoke_stage_ = 1;
     tab_smoke_first_ = id;
-    OpenTab(browser->GetMainFrame()->GetURL().ToString());
+    SendTestKeys(browser, {kTestT});
     return;
   }
   if (tab_smoke_stage_ == 1 && id != tab_smoke_first_) {

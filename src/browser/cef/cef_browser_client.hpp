@@ -138,6 +138,8 @@ class CefBrowserClient : public CefClient,
   void FinishSmoke(int code);
 
   const bool alloy_style_;
+  // Page a new tab opens: the initial URL until there is a home page setting.
+  const std::string new_tab_url_;
   const bool smoke_test_;
   const bool tab_smoke_test_;
   const bool key_smoke_test_;

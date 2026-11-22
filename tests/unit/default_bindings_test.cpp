@@ -49,6 +49,7 @@ TEST_F(DefaultBindingsTest, EachKeyRunsItsCommand) {
       {{"G"}, "scroll-to-bottom"},
       {{"g", "t"}, "tab-next"},
       {{"g", "T"}, "tab-previous"},
+      {{"t"}, "tab-new"},
       {{"x"}, "tab-close"},
   };
   for (const auto& c : kCases) {
