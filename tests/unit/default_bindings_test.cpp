@@ -47,6 +47,8 @@ TEST_F(DefaultBindingsTest, EachKeyRunsItsCommand) {
       {{"u"}, "scroll-half-page-up"},
       {{"g", "g"}, "scroll-to-top"},
       {{"G"}, "scroll-to-bottom"},
+      {{"H"}, "history-back"},
+      {{"L"}, "history-forward"},
       {{"g", "t"}, "tab-next"},
       {{"g", "T"}, "tab-previous"},
       {{"t"}, "tab-new"},

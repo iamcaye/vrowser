@@ -74,6 +74,8 @@ constexpr TestKey kTestT{'T', 17, 28, u't'};
 constexpr TestKey kTestShiftT{'T', 17, 28, u'T', true};
 constexpr TestKey kTestX{'X', 7, 53, u'x'};
 constexpr TestKey kTest3{'3', 20, 12, u'3'};
+constexpr TestKey kTestShiftH{'H', 4, 43, u'H', true};
+constexpr TestKey kTestShiftL{'L', 37, 46, u'L', true};
 
 struct ScrollCommand {
   const char* name;
@@ -155,6 +157,26 @@ void CefBrowserClient::RegisterCommands() {
                             "Show the previous tab, wrapping to the last",
                             [this](const std::vector<std::string>&, int count) {
                               SwitchTab(-count);
+                              return CommandResult::Ok();
+                            });
+  // Counted so that a count does not queue several navigations; one step per
+  // key until a multi-step history API is chosen.
+  commands_.RegisterCounted("history-back",
+                            "Go back one page in the current tab",
+                            [this](const std::vector<std::string>&, int) {
+                              CefRefPtr<CefBrowser> browser = CommandBrowser();
+                              if (browser && browser->CanGoBack()) {
+                                browser->GoBack();
+                              }
+                              return CommandResult::Ok();
+                            });
+  commands_.RegisterCounted("history-forward",
+                            "Go forward one page in the current tab",
+                            [this](const std::vector<std::string>&, int) {
+                              CefRefPtr<CefBrowser> browser = CommandBrowser();
+                              if (browser && browser->CanGoForward()) {
+                                browser->GoForward();
+                              }
                               return CommandResult::Ok();
                             });
   // Counted so that `3t` opens one tab, like `3x` below.
@@ -1006,7 +1028,15 @@ void CefBrowserClient::KeySmokeStep(CefRefPtr<CefBrowser> browser,
        "hold j with no key-up: the loop stops on its own",
        {},
        0},
-      {"title timeout:stopped", "done", {}, 0},
+      {"title timeout:stopped", "load a second page", {}, 0},
+      // Wait for each load to finish: a history key pressed mid-load is lost.
+      {"load-end", "second page loaded; H goes back", {kTestShiftH}, 1},
+      {"load-end",
+       "back on the first page; H at the start of history does nothing; L "
+       "goes forward",
+       {kTestShiftH, kTestShiftL},
+       2},
+      {"title second", "done", {}, 0},
   };
   constexpr int kStepCount = static_cast<int>(std::size(kSteps));
   if (key_smoke_step_ >= kStepCount ||
@@ -1035,6 +1065,13 @@ void CefBrowserClient::KeySmokeStep(CefRefPtr<CefBrowser> browser,
                  "document.title = 'hold:' + (y > 400 ? 'moved' : 'short') + "
                  "':' + (scrollY === y ? 'stopped' : 'running'); }, 300); "
                  "})();");
+    return;
+  }
+  if (index == kHoldStep + 2) {
+    // Chromium ignores a page's own fragment navigation on a top-level data:
+    // URL, so the second history entry is a browser-initiated load.
+    browser->GetMainFrame()->LoadURL(
+        DataUri("<!doctype html><title>second</title>", "text/html"));
     return;
   }
   if (index == kHoldStep + 1) {

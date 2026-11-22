@@ -106,6 +106,9 @@ create more than one tab and can report frame focus.
   and `kScrollAnimationMs = 0` restores instant scrolling until there is a
   setting. Steps and the held-key loop share one state object in the page,
   so each cancels the other.
+- History keys: `H` goes back one entry and `L` forward one entry in the tab
+  whose key ran them (`CefBrowser::GoBack`/`GoForward`); at either end the
+  key is consumed and nothing happens. A count is ignored for now.
 - Tab keys: `t` opens a new tab with the start page (the initial `--url`
   until there is a home page setting) and focuses it. `gt` and `gT` move to the next and previous tab and wrap; a count
   moves that many tabs (`3gt`). `x` closes the tab whose key ran it; closing
