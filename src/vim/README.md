@@ -16,3 +16,5 @@ must not include CEF headers.
   reports a match, a prefix, or no match; no match clears the buffer.
   `KeyNotation` turns a `KeyEvent` into one notation token. In Normal mode,
   leading digits form a count (`12j`); `0` is a key unless a count started.
+- `AddDefaultBindings` (`default_bindings.cpp`): the built-in Normal-mode
+  table (`r`, `j`, `k`, `d`, `u`, `gg`, `G`).

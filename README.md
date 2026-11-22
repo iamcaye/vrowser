@@ -70,7 +70,7 @@ Switches:
 | `--use-alloy-style` | Alloy window instead of the default Chrome style. |
 | `--use-native` | Platform window instead of CEF Views. |
 | `--vrowser-smoke-test` | Quit after the main frame reports a successful status. |
-| `--vrowser-key-smoke-test` | Load a built-in test page, send keys, check Normal-mode bindings are consumed and a focused field selects Insert, and quit. Chrome style only. |
+| `--vrowser-key-smoke-test` | Load a built-in test page, send keys, check Normal-mode bindings are consumed, a focused field selects Insert, and `j`, `3j`, `k`, `G`, `gg`, `d`, `u` scroll, and quit. Chrome style only. |
 | `--vrowser-tab-smoke-test` | Open the URL in a second tab, close the first, check the second is shown, and quit. Needs `--use-alloy-style`. |
 
 ## Layout

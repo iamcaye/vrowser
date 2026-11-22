@@ -34,26 +34,30 @@ void CefBrowserClient::PlatformShowWindow(CefRefPtr<CefBrowser> browser) {
 }
 
 void CefBrowserClient::PlatformSendTestKey(CefRefPtr<CefBrowser> browser,
-                                           int mac_key_code,
-                                           char16_t character) {
+                                           const TestKey& key) {
   NSWindow* window = WindowForBrowser(browser);
   if (window == nil) {
     return;
   }
-  const unichar unit = character;
+  const unichar unit = key.character;
+  const unichar unshifted =
+      key.shift && unit >= 'A' && unit <= 'Z' ? unit - 'A' + 'a' : unit;
   NSString* characters = [NSString stringWithCharacters:&unit length:1];
+  NSString* ignoring = [NSString stringWithCharacters:&unshifted length:1];
+  const NSEventModifierFlags flags = key.shift ? NSEventModifierFlagShift : 0;
   for (const NSEventType type : {NSEventTypeKeyDown, NSEventTypeKeyUp}) {
     NSEvent* event = [NSEvent
                    keyEventWithType:type
                            location:NSZeroPoint
-                      modifierFlags:0
+                      modifierFlags:flags
                           timestamp:[[NSProcessInfo processInfo] systemUptime]
                        windowNumber:[window windowNumber]
                             context:nil
                          characters:characters
-        charactersIgnoringModifiers:characters
+        charactersIgnoringModifiers:ignoring
                           isARepeat:NO
-                            keyCode:static_cast<unsigned short>(mac_key_code)];
+                            keyCode:static_cast<unsigned short>(
+                                        key.mac_key_code)];
     [window sendEvent:event];
   }
 }

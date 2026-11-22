@@ -31,6 +31,10 @@ std::vector<std::string> SplitOnWhitespace(std::string_view line) {
   return tokens;
 }
 
+bool IsValidName(const std::string& name) {
+  return !name.empty() && std::none_of(name.begin(), name.end(), IsSpace);
+}
+
 }  // namespace
 
 ParsedCommand ParseCommandLine(std::string_view line) {
@@ -48,13 +52,24 @@ ParsedCommand ParseCommandLine(std::string_view line) {
 bool CommandRegistry::Register(std::string name,
                                std::string description,
                                CommandHandler handler) {
-  if (name.empty() || !handler ||
-      std::any_of(name.begin(), name.end(), IsSpace)) {
+  if (!IsValidName(name) || !handler) {
     return false;
   }
   return commands_
       .try_emplace(std::move(name),
-                   Entry{std::move(description), std::move(handler)})
+                   Entry{std::move(description), std::move(handler), {}})
+      .second;
+}
+
+bool CommandRegistry::RegisterCounted(std::string name,
+                                      std::string description,
+                                      CountedCommandHandler handler) {
+  if (!IsValidName(name) || !handler) {
+    return false;
+  }
+  return commands_
+      .try_emplace(std::move(name),
+                   Entry{std::move(description), {}, std::move(handler)})
       .second;
 }
 
@@ -96,11 +111,13 @@ CommandResult CommandRegistry::Run(std::string_view name,
   if (it == commands_.end()) {
     return CommandResult::Error("Unknown command: " + std::string(name));
   }
-  // A typed count repeats the command. No count, or a count of 1, runs once.
-  int times = 1;
-  if (has_count && count > 1) {
-    times = count;
+  const int typed = has_count && count > 1 ? count : 1;
+  if (it->second.counted) {
+    return it->second.counted(args, typed);
   }
+  // A typed count repeats a plain command. No count, or a count of 1, runs
+  // once.
+  const int times = typed;
   CommandResult result = CommandResult::Ok();
   for (int i = 0; i < times; ++i) {
     result = it->second.handler(args);

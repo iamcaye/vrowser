@@ -46,7 +46,10 @@ is unit-tested without CEF.
 A binding resolves to a command name plus arguments, not to a function pointer
 buried in the UI. The command registry will live in `src/commands` and will be
 callable from a key binding, the command line, and a later CLI. The browser
-client registers `reload`, bound to `r` in Normal mode. `--url` is a process switch parsed in
+client registers `reload` and the scroll commands; `AddDefaultBindings` in
+`src/vim` binds them in Normal mode. A command registered with
+`RegisterCounted` takes the count itself (`5j` is one call), while a plain
+command is repeated (`3r`). `--url` is a process switch parsed in
 `src/core`, not a command.
 
 ## Hints
@@ -78,5 +81,11 @@ create more than one tab and can report frame focus.
   `vrowser.editable-focus` with one bool. The browser accepts only that message
   shape from `PID_RENDERER` and uses it only to switch that tab between Normal
   and Insert. Focus inside cross-process iframes is #23.
-- One default binding: `r` runs the `reload` command through the
-  `CommandRegistry`. A count repeats that command. Scrolling bindings are #19.
+- Default bindings: `r` reloads; `j`/`k` scroll one 60px line step, `d`/`u`
+  half the viewport, `gg`/`G` to the top and bottom. Line and half-page
+  motions multiply by the count; `gg` and `G` ignore it. A command runs in
+  the browser whose key triggered it. Scrolling runs a constant script
+  (`ScrollScript` in `src/core`) with `ExecuteJavaScript` in the focused
+  frame, or the main frame when none has focus. It scrolls the frame's
+  document, so a page that scrolls an inner element instead (some web apps)
+  does not move yet.
