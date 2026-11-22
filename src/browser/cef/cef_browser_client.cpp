@@ -18,6 +18,7 @@
 #include "include/wrapper/cef_helpers.h"
 #include "browser/cef/cef_renderer_app.hpp"
 #include "browser/cef/views_delegates.hpp"
+#include "vrowser/ui/status_line.hpp"
 #include "vrowser/vim/default_bindings.hpp"
 #include "vrowser/vim/key_event.hpp"
 
@@ -219,8 +220,69 @@ void CefBrowserClient::SwitchTab(int steps) {
     browser->GetHost()->SetFocus(true);
   }
   ShowActiveTitle();
+  UpdateStatusBar();
   std::fprintf(stderr, "vrowser: tab %d active\n", *after);
   TabSmokeActivated(*after);
+}
+
+void CefBrowserClient::AttachStatusBar(CefRefPtr<CefTextfield> status_bar) {
+  CEF_REQUIRE_UI_THREAD();
+  status_bar_ = status_bar;
+  UpdateStatusBar();
+}
+
+void CefBrowserClient::UpdateStatusBar() {
+  CEF_REQUIRE_UI_THREAD();
+  if (!status_bar_ || !status_bar_->IsValid()) {
+    return;
+  }
+  StatusLineInput input;
+  if (CefRefPtr<CefBrowser> browser = ActiveBrowser()) {
+    const TabId id = browser->GetIdentifier();
+    // The committed URL as the browser process knows it. Never the title or
+    // anything the page reports about itself.
+    input.url = browser->GetMainFrame()->GetURL().ToString();
+    input.loading = loading_tabs_.count(id) > 0;
+    const auto it = key_inputs_.find(id);
+    if (it != key_inputs_.end()) {
+      input.mode = it->second.mode.mode();
+      input.pending = it->second.sequence;
+    }
+  }
+  // About 7 px per character of the 12 px monospace font.
+  const int width = status_bar_->GetBounds().width;
+  const size_t max_chars = width > 0 ? static_cast<size_t>(width) / 7 : 160;
+  status_bar_->SetText(FormatStatusLine(input, max_chars));
+}
+
+std::string CefBrowserClient::StatusBarText() const {
+  return status_bar_ ? status_bar_->GetText().ToString() : std::string();
+}
+
+void CefBrowserClient::OnAddressChange(CefRefPtr<CefBrowser> browser,
+                                       CefRefPtr<CefFrame> frame,
+                                       const CefString& url) {
+  CEF_REQUIRE_UI_THREAD();
+  (void)browser;
+  (void)url;
+  if (frame->IsMain()) {
+    UpdateStatusBar();
+  }
+}
+
+void CefBrowserClient::OnLoadingStateChange(CefRefPtr<CefBrowser> browser,
+                                            bool is_loading,
+                                            bool can_go_back,
+                                            bool can_go_forward) {
+  CEF_REQUIRE_UI_THREAD();
+  (void)can_go_back;
+  (void)can_go_forward;
+  if (is_loading) {
+    loading_tabs_.insert(browser->GetIdentifier());
+  } else {
+    loading_tabs_.erase(browser->GetIdentifier());
+  }
+  UpdateStatusBar();
 }
 
 void CefBrowserClient::ShowActiveTitle() {
@@ -356,6 +418,7 @@ bool CefBrowserClient::OnProcessMessageReceived(
   KeyInputState& input = key_inputs_[browser->GetIdentifier()];
   const Mode before = input.mode.mode();
   NoteEditableFocus(input, editable);
+  UpdateStatusBar();
   if (input.mode.mode() != before) {
     std::fprintf(stderr, "vrowser: mode %s\n",
                  input.mode.mode() == Mode::kInsert ? "insert" : "normal");
@@ -391,6 +454,7 @@ bool CefBrowserClient::OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
     RunBinding(browser, dispatch);
   }
   HandleHold(browser, dispatch, event.native_key_code);
+  UpdateStatusBar();
   return dispatch.disposition == KeyDisposition::kConsume;
 }
 
@@ -440,12 +504,24 @@ void CefBrowserClient::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
       TransferHeldKeys(key_inputs_[*previous], key_inputs_[id]);
       browser->GetHost()->SetFocus(true);
     }
+    UpdateStatusBar();
   }
 
   if (smoke_test_ && !smoke_timer_armed_) {
     smoke_timer_armed_ = true;
     CefPostDelayedTask(
         TID_UI, base::BindOnce(&CefBrowserClient::OnSmokeTimeout, this), 45000);
+  }
+}
+
+void CefBrowserClient::RemoveTabView(CefRefPtr<CefPanel> tabs,
+                                     CefRefPtr<CefBrowserView> view) {
+  CEF_REQUIRE_UI_THREAD();
+  tabs->RemoveChildView(view);
+  // The removed view held keyboard focus, and Views does not hand it to the
+  // tab that is now shown.
+  if (CefRefPtr<CefBrowser> active = ActiveBrowser()) {
+    active->GetHost()->SetFocus(true);
   }
 }
 
@@ -468,12 +544,13 @@ bool CefBrowserClient::DoClose(CefRefPtr<CefBrowser> browser) {
         active->GetHost()->SetFocus(true);
       }
       ShowActiveTitle();
-      CefPostTask(TID_UI, base::BindOnce(
-                              [](CefRefPtr<CefWindow> parent,
-                                 CefRefPtr<CefBrowserView> child) {
-                                parent->RemoveChildView(child);
-                              },
-                              window, view));
+      UpdateStatusBar();
+      CefRefPtr<CefView> parent = view->GetParentView();
+      CefRefPtr<CefPanel> panel = parent ? parent->AsPanel() : nullptr;
+      if (panel) {
+        CefPostTask(TID_UI, base::BindOnce(&CefBrowserClient::RemoveTabView,
+                                           this, panel, view));
+      }
       return true;
     }
   }
@@ -497,11 +574,15 @@ void CefBrowserClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
   if (held_scroll_ && held_scroll_->tab == id) {
     held_scroll_.reset();
   }
+  loading_tabs_.erase(id);
   if (tabs_.Close(id)) {
     ShowActiveTab();
   }
   TabSmokeClosed(id);
   if (browsers_.empty()) {
+    // The window is gone. CEF requires every reference to be released before
+    // CefShutdown.
+    status_bar_ = nullptr;
     CefQuitMessageLoop();
   }
 }
@@ -657,9 +738,11 @@ void CefBrowserClient::OpenTab(const std::string& url) {
   CefRefPtr<CefBrowser> current = ActiveBrowser();
   CefRefPtr<CefBrowserView> current_view =
       current ? CefBrowserView::GetForBrowser(current) : nullptr;
-  CefRefPtr<CefWindow> window =
-      current_view ? current_view->GetWindow() : nullptr;
-  if (!window) {
+  // Tab views share one parent panel; see CreateWindowDelegate.
+  CefRefPtr<CefView> parent =
+      current_view ? current_view->GetParentView() : nullptr;
+  CefRefPtr<CefPanel> tabs = parent ? parent->AsPanel() : nullptr;
+  if (!tabs) {
     std::fprintf(stderr, "vrowser: tabs need a Views window\n");
     return;
   }
@@ -668,7 +751,7 @@ void CefBrowserClient::OpenTab(const std::string& url) {
   CefBrowserSettings browser_settings;
   std::fprintf(stderr, "vrowser: open-tab %s\n", url.c_str());
   // OnAfterCreated appends the new browser to tabs_ and shows it.
-  window->AddChildView(CefBrowserView::CreateBrowserView(
+  tabs->AddChildView(CefBrowserView::CreateBrowserView(
       this, url, browser_settings, nullptr, nullptr,
       CreateBrowserViewDelegate(runtime_style)));
 }
@@ -760,6 +843,10 @@ void CefBrowserClient::TabSmokeLoadEnd(CefRefPtr<CefBrowser> browser) {
   if (tab_smoke_stage_ == 0) {
     tab_smoke_stage_ = 1;
     tab_smoke_first_ = id;
+    if (!TabSmokeStatusBarShows(browser)) {
+      FinishSmoke(1);
+      return;
+    }
     SendTestKeys(browser, {kTestT});
     return;
   }
@@ -767,12 +854,24 @@ void CefBrowserClient::TabSmokeLoadEnd(CefRefPtr<CefBrowser> browser) {
     tab_smoke_stage_ = 2;
     tab_smoke_second_ = id;
     std::fprintf(stderr, "vrowser-smoke: tabs open %zu\n", tabs_.size());
-    if (tabs_.size() != 2 || tabs_.active() != id) {
+    if (tabs_.size() != 2 || tabs_.active() != id ||
+        !TabSmokeStatusBarShows(browser)) {
       FinishSmoke(1);
       return;
     }
     SendTestKeys(browser, {kTestG, kTestT});
   }
+}
+
+bool CefBrowserClient::TabSmokeStatusBarShows(CefRefPtr<CefBrowser> browser) {
+  // The bar must show Normal mode and the URL the browser committed.
+  const std::string text = StatusBarText();
+  const std::string url = browser->GetMainFrame()->GetURL().ToString();
+  const bool ok =
+      text.starts_with("NORMAL  ") && text.find(url) != std::string::npos;
+  std::fprintf(stderr, "vrowser-smoke: status bar %s: \"%s\"\n",
+               ok ? "ok" : "failed", text.c_str());
+  return ok;
 }
 
 void CefBrowserClient::TabSmokeActivated(TabId id) {

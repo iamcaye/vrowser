@@ -9,6 +9,7 @@ FetchContent_MakeAvailable(googletest)
 
 add_executable(vrowser_unit_tests
   unit/startup_config_test.cpp
+  unit/status_line_test.cpp
   unit/command_registry_test.cpp
   unit/default_bindings_test.cpp
   unit/key_bindings_test.cpp
@@ -22,6 +23,7 @@ target_link_libraries(vrowser_unit_tests PRIVATE
   vrowser_core
   vrowser_commands
   vrowser_vim
+  vrowser_ui
   GTest::gtest_main)
 target_compile_features(vrowser_unit_tests PRIVATE cxx_std_20)
 

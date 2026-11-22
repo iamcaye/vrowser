@@ -27,6 +27,7 @@ option(VROWSER_BUILD_TESTS "Build GoogleTest unit tests" ON)
 add_subdirectory(src/core)
 add_subdirectory(src/commands)
 add_subdirectory(src/vim)
+add_subdirectory(src/ui)
 
 if(VROWSER_BUILD_TESTS)
   enable_testing()

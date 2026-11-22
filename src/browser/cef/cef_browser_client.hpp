@@ -9,10 +9,12 @@
 #include <list>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 
 #include "include/cef_client.h"
 #include "include/views/cef_browser_view.h"
+#include "include/views/cef_textfield.h"
 #include "include/views/cef_window.h"
 #include "vrowser/core/navigation.hpp"
 #include "vrowser/core/scroll.hpp"
@@ -59,6 +61,14 @@ class CefBrowserClient : public CefClient,
   CefRefPtr<CefKeyboardHandler> GetKeyboardHandler() override { return this; }
   CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
   CefRefPtr<CefLoadHandler> GetLoadHandler() override { return this; }
+
+  void OnAddressChange(CefRefPtr<CefBrowser> browser,
+                       CefRefPtr<CefFrame> frame,
+                       const CefString& url) override;
+  void OnLoadingStateChange(CefRefPtr<CefBrowser> browser,
+                            bool is_loading,
+                            bool can_go_back,
+                            bool can_go_forward) override;
 
   bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
                                 CefRefPtr<CefFrame> frame,
@@ -112,6 +122,8 @@ class CefBrowserClient : public CefClient,
   // the key-up of a key-down that OnPreKeyEvent consumed, so this is how a
   // held scroll learns its key was released there. UI thread.
   void OnNativeKeyUp(int native_key_code);
+  // The main window's status bar (Alloy style). UI thread.
+  void AttachStatusBar(CefRefPtr<CefTextfield> status_bar);
   int exit_code() const { return exit_code_; }
 
  private:
@@ -135,8 +147,12 @@ class CefBrowserClient : public CefClient,
   CefRefPtr<CefBrowser> CommandBrowser() const;
   // Shows the active tab's view and hides the other tabs' views.
   void ShowActiveTab();
+  // Takes a closed tab's view out of its panel, then focuses the active tab.
+  void RemoveTabView(CefRefPtr<CefPanel> tabs, CefRefPtr<CefBrowserView> view);
   void TabSmokeLoadEnd(CefRefPtr<CefBrowser> browser);
   void TabSmokeActivated(TabId id);
+  // Tab smoke: logs the status bar and checks it shows the browser's URL.
+  bool TabSmokeStatusBarShows(CefRefPtr<CefBrowser> browser);
   void TabSmokeClosed(TabId id);
   // Types `keys` into `browser`, in order, from UI tasks.
   void SendTestKeys(CefRefPtr<CefBrowser> browser,
@@ -151,6 +167,11 @@ class CefBrowserClient : public CefClient,
   void SwitchTab(int steps);
   // Sets the window title from the active tab's current page.
   void ShowActiveTitle();
+  // Redraws the status bar for the active tab: committed main-frame URL,
+  // mode, pending keys, loading. Does nothing without a status bar.
+  void UpdateStatusBar();
+  // Current status bar text, empty without one. For the smoke tests.
+  std::string StatusBarText() const;
   void KeySmokeStep(CefRefPtr<CefBrowser> browser, const std::string& event);
   void SendTestKey(CefRefPtr<CefBrowser> browser,
                    TestKey key,
@@ -213,6 +234,9 @@ class CefBrowserClient : public CefClient,
     std::chrono::steady_clock::time_point last_keep_alive;
   };
   std::optional<HeldScroll> held_scroll_;
+  // UI thread only.
+  CefRefPtr<CefTextfield> status_bar_;
+  std::set<TabId> loading_tabs_;
 
   IMPLEMENT_REFCOUNTING(CefBrowserClient);
 };
