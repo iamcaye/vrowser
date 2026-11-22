@@ -954,7 +954,7 @@ void CefBrowserClient::KeySmokeStep(CefRefPtr<CefBrowser> browser,
   }
   // From step 7 on every key is a bound motion, so the page must see none.
   constexpr int kFirstScrollStep = 7;
-  constexpr int kHoldStep = 13;
+  constexpr int kHoldStep = 14;
   if (event == "title key:r:body" || event.starts_with("title key:Escape") ||
       event == "title timeout:running" ||
       (event.starts_with("title hold:") &&
@@ -971,7 +971,7 @@ void CefBrowserClient::KeySmokeStep(CefRefPtr<CefBrowser> browser,
     const char* note;
     // Keys typed once `wait_for` arrives, in order. Steps 2, 3, and the last
     // step act differently; see the switch below.
-    TestKey keys[2];
+    TestKey keys[3];
     int key_count;
   };
   static constexpr Step kSteps[] = {
@@ -995,6 +995,10 @@ void CefBrowserClient::KeySmokeStep(CefRefPtr<CefBrowser> browser,
       {"title scroll:0", "d scrolls half a page down", {kTestD}, 1},
       {"title scroll:half", "u scrolls half a page up", {kTestU}, 1},
       {"title scroll:0",
+       "jjj typed quickly ends where 3j does",
+       {kTestJ, kTestJ, kTestJ},
+       3},
+      {"title scroll:180",
        "hold j: the page keeps scrolling, and stops on key-up",
        {},
        0},
@@ -1024,11 +1028,11 @@ void CefBrowserClient::KeySmokeStep(CefRefPtr<CefBrowser> browser,
     return;
   }
   // The probes record scrollY, wait 300 ms, and report whether the page moved
-  // past the first step and whether it is still moving.
+  // well past where the hold began (180) and whether it is still moving.
   if (index == kHoldStep) {
     SendTestHold(browser, kTestJ, 10, true, 100,
                  "(() => { const y = scrollY; setTimeout(() => { "
-                 "document.title = 'hold:' + (y > 120 ? 'moved' : 'short') + "
+                 "document.title = 'hold:' + (y > 400 ? 'moved' : 'short') + "
                  "':' + (scrollY === y ? 'stopped' : 'running'); }, 300); "
                  "})();");
     return;
