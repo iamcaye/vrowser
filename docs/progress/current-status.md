@@ -89,6 +89,7 @@ Clang 21.0.0, Ninja 1.13.2.
 | Held scroll, real keyboard, Chrome style and `--use-alloy-style` (manual, long page) | held `j`/`k`/`d`/`u` scroll continuously and stop on release; a short `j` moves one step; held `r` reloads once; Cmd+Tab away while holding `j` stops within a second |
 | Animated scroll, real keyboard, Chrome style and `--use-alloy-style` (manual, long page) | `j`/`k`/`d`/`u`/`gg`/`G` scroll smoothly; `jjj` lands where `3j` does; held `j` still works; with Reduce motion on, steps are instant |
 | History keys, real keyboard, Chrome style and `--use-alloy-style` (manual, Wikipedia links) | `H` back and `L` forward, `H` on the first page does nothing and stays out of the page, `H` then `L` quickly works, `H`/`L` in a text field are typed |
+| Status bar, real keyboard, `--use-alloy-style` (manual, Wikipedia) | visible and readable; `INSERT` in a text field, `NORMAL` after Escape; pending `3` and `g` shown; `loading` during loads; URL follows links, `H`/`L`, `t`, `gt`, `gT`; a long URL is cut after the host; Chrome style has no bar |
 | Chrome-style smoke (`--vrowser-smoke-test`) | exit 0, `vrowser-smoke: ok 200` |
 | Alloy-style smoke (`--use-alloy-style --vrowser-smoke-test`) | exit 0, `vrowser-smoke: ok 200` |
 | `https://expired.badssl.com/` Chrome style | Chromium keeps the error UI; no client data URL |
