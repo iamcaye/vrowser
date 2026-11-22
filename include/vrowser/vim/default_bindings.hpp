@@ -16,6 +16,8 @@ namespace vrowser {
 //   u   scroll-half-page-up      half the viewport, times the count
 //   gg  scroll-to-top
 //   G   scroll-to-bottom
+//   H   history-back             one entry back in the current tab
+//   L   history-forward          one entry forward in the current tab
 //   gt  tab-next                 count tabs right, wrapping
 //   gT  tab-previous             count tabs left, wrapping
 //   t   tab-new                  a new tab with the start page

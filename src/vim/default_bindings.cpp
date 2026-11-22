@@ -18,6 +18,8 @@ bool AddDefaultBindings(KeyBindings& bindings) {
       {"u", "scroll-half-page-up"},
       {"gg", "scroll-to-top"},
       {"G", "scroll-to-bottom"},
+      {"H", "history-back"},
+      {"L", "history-forward"},
       {"gt", "tab-next"},
       {"gT", "tab-previous"},
       {"t", "tab-new"},
