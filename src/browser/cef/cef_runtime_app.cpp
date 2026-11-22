@@ -76,7 +76,9 @@ void CefRuntimeApp::OnContextInitialized() {
         client_, config_.initial_url, browser_settings, nullptr, nullptr,
         CreateBrowserViewDelegate(runtime_style));
     CefWindow::CreateTopLevelWindow(
-        CreateWindowDelegate(browser_view, runtime_style));
+        // Alloy has no toolbar, so the main window gets a status bar with the
+        // URL. Chrome style keeps Chromium's toolbar.
+        CreateWindowDelegate(browser_view, runtime_style, config_.alloy_style));
     return;
   }
 

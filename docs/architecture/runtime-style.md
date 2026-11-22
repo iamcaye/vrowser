@@ -99,7 +99,8 @@ after Vrowser implements:
 
 Until those land, develop the command line and status bar against
 `--use-alloy-style` while leaving the shipped default on Chrome style so
-day-to-day browsing remains usable.
+day-to-day browsing remains usable. The Alloy main window now has the status
+bar (#63): a box layout with the tab views in a fill-layout panel above it.
 
 ## Out of scope here
 

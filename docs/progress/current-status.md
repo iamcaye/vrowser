@@ -30,6 +30,12 @@ started.
   tab removes its view, and closing the last tab quits. `t` opens a tab
   with the start page, `gt`/`gT` switch tabs and wrap, `x` closes the current
   tab. No tab strip yet.
+- Status bar at the bottom of the Alloy main window: mode, pending count or
+  keys, the active tab's committed URL, and `loading`. The URL comes from the
+  browser process, never from the page; user info (`user:pass@`) is hidden,
+  and a long URL is cut from the end of the path, never through the host.
+  Chrome style keeps Chromium's toolbar instead. Popup windows have no status
+  bar yet.
 - Normal and Insert modes in the window: Normal-mode bindings are consumed
   before the page sees them, a focused text field switches the tab to Insert,
   and Escape returns to Normal. Bindings: `r` reloads, `j`/`k` scroll a line
@@ -74,7 +80,7 @@ Clang 21.0.0, Ninja 1.13.2.
 | CEF macOS arm64 archive SHA256 | `22a510e5d348a907953278b618e1e9e442ccf78773b9fee0e09eaf154eef53b0` |
 | Smoke test, sandbox left on | `https://example.com` main frame HTTP 200, process exit 0 |
 | Relaunch with `--url=https://www.iana.org/help/example-domains` into a running app | `vrowser: load-end 200 https://www.iana.org/help/example-domains` in the first process |
-| `just tab-smoke` (`--vrowser-tab-smoke-test --use-alloy-style`) | `t` opened the second tab; `gt` wrapped to tab 1, `gT` wrapped to tab 2; `x` closed tab 2 (`vrowser-smoke: tabs ok, 1 open, remaining visible`); `x` on the last tab quit, exit 0 |
+| `just tab-smoke` (`--vrowser-tab-smoke-test --use-alloy-style`) | status bar showed `NORMAL  https://example.com/  loading` on both tabs; `t` opened the second tab; `gt` wrapped to tab 1, `gT` wrapped to tab 2; `x` closed tab 2 (`vrowser-smoke: tabs ok, 1 open, remaining visible`); `x` on the last tab quit, exit 0 |
 | `--vrowser-tab-smoke-test` in Chrome style | `vrowser: tabs need --use-alloy-style`, exit 1 (second Chrome-style browser view is never created) |
 | `just key-smoke` (`--vrowser-key-smoke-test`, Chrome style) | unbound `q` reached the page, `r` ran `reload` and did not, focused field selected Insert, Escape returned to Normal and did not reach the page; `j` 60, `3j` 240, `k` 180, `G` bottom, `gg` 0, `d` half a viewport, `u` 0, no motion key reached the page; `jjj` typed quickly ended at 180 like `3j`, held `j` kept scrolling and stopped on key-up, held `j` with no key-up stopped on its own, `H` went back from a second page, `H` at the start did nothing, `L` went forward; `vrowser-smoke: keys ok`, exit 0 (three runs) |
 | `--vrowser-key-smoke-test --use-alloy-style` | not supported: synthesized keys never reach Alloy pages, even without a keyboard handler; exits 1 with a message |
@@ -83,6 +89,7 @@ Clang 21.0.0, Ninja 1.13.2.
 | Held scroll, real keyboard, Chrome style and `--use-alloy-style` (manual, long page) | held `j`/`k`/`d`/`u` scroll continuously and stop on release; a short `j` moves one step; held `r` reloads once; Cmd+Tab away while holding `j` stops within a second |
 | Animated scroll, real keyboard, Chrome style and `--use-alloy-style` (manual, long page) | `j`/`k`/`d`/`u`/`gg`/`G` scroll smoothly; `jjj` lands where `3j` does; held `j` still works; with Reduce motion on, steps are instant |
 | History keys, real keyboard, Chrome style and `--use-alloy-style` (manual, Wikipedia links) | `H` back and `L` forward, `H` on the first page does nothing and stays out of the page, `H` then `L` quickly works, `H`/`L` in a text field are typed |
+| Status bar, real keyboard, `--use-alloy-style` (manual, Wikipedia) | visible and readable; `INSERT` in a text field, `NORMAL` after Escape; pending `3` and `g` shown; `loading` during loads; URL follows links, `H`/`L`, `t`, `gt`, `gT`; a long URL is cut after the host; Chrome style has no bar |
 | Chrome-style smoke (`--vrowser-smoke-test`) | exit 0, `vrowser-smoke: ok 200` |
 | Alloy-style smoke (`--use-alloy-style --vrowser-smoke-test`) | exit 0, `vrowser-smoke: ok 200` |
 | `https://expired.badssl.com/` Chrome style | Chromium keeps the error UI; no client data URL |
@@ -120,6 +127,8 @@ checked on this branch after the key-dispatch fixes:
   style after the UI gaps listed in
   [runtime-style.md](../architecture/runtime-style.md) are closed.
 - No tab strip, command line, history, or bookmarks.
+- The status bar's character budget assumes about 7 px per character of a
+  12 px monospace font; it is recomputed on every update, not on resize.
 - On macOS a key-down consumed in `OnPreKeyEvent` never gets its key-up
   there; a held scroll is stopped by an `NSEvent` key-up monitor, and other
   consumed key-ups are dropped from tracking on the next press.
@@ -151,4 +160,5 @@ Alloy's client-owned prompt path.
 
 ## Recommended next task
 
-[Show a status bar with the URL and mode](https://github.com/iamcaye/vrowser/issues/63).
+[Show command mode](https://github.com/iamcaye/vrowser/issues/21), which
+unblocks `:open` (#64). It still needs the `agent-ready` label.
