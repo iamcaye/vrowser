@@ -1,6 +1,6 @@
 # Current status
 
-Updated: 2026-11-21
+Updated: 2026-11-22
 
 ## Milestone
 
@@ -72,6 +72,7 @@ Clang 21.0.0, Ninja 1.13.2.
 | `--vrowser-tab-smoke-test` in Chrome style | `vrowser: tabs need --use-alloy-style`, exit 1 (second Chrome-style browser view is never created) |
 | `just key-smoke` (`--vrowser-key-smoke-test`, Chrome style) | unbound `x` reached the page, `r` ran `reload` and did not, focused field selected Insert, Escape returned to Normal and did not reach the page; `vrowser-smoke: keys ok`, exit 0 |
 | `--vrowser-key-smoke-test --use-alloy-style` | not supported: synthesized keys never reach Alloy pages, even without a keyboard handler; exits 1 with a message |
+| Real keyboard, Chrome style and `--use-alloy-style` (manual, `https://duckduckgo.com`) | `r` reloads and stays out of the page, a focused field selects Insert and types `r`, Escape returns to Normal and does not reach the field, the next `r` reloads; `3r` reloads three times; a held `r` reloads once; Cmd+L and unbound keys still reach the browser and page |
 | Chrome-style smoke (`--vrowser-smoke-test`) | exit 0, `vrowser-smoke: ok 200` |
 | Alloy-style smoke (`--use-alloy-style --vrowser-smoke-test`) | exit 0, `vrowser-smoke: ok 200` |
 | `https://expired.badssl.com/` Chrome style | Chromium keeps the error UI; no client data URL |
@@ -128,8 +129,8 @@ Vim shell. Details in
 
 Normal and Insert modes work in the window (#18). Scrolling from Normal mode
 (#19) adds the first real bindings. Following focus into iframes (#23) and
-keyboard tab switching (#32) build on the same dispatcher. Real typing in
-Alloy style still needs a manual check. Permission handling should follow
+keyboard tab switching (#32) build on the same dispatcher. Real typing was
+checked by hand on macOS in both Chrome and Alloy styles. Permission handling should follow
 Alloy's client-owned prompt path.
 
 ## Recommended next task
