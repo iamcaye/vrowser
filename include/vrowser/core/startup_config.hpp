@@ -21,7 +21,7 @@ struct StartupConfig {
   bool use_views{true};
   // Load the initial URL, print one result line, and quit.
   bool smoke_test{false};
-  // Like smoke_test, but opens the URL in a second tab, switches tabs with
+  // Like smoke_test, but opens a second tab with `t`, switches tabs with
   // `gt` and `gT`, and closes both with `x`, so closing the last tab quits.
   // Implies smoke_test.
   bool tab_smoke_test{false};
