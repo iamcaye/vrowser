@@ -1,5 +1,6 @@
 add_library(vrowser_core STATIC
   navigation.cpp
+  scroll.cpp
   startup_config.cpp
   tab_list.cpp)
 target_include_directories(vrowser_core PUBLIC

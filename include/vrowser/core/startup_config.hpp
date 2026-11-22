@@ -25,8 +25,8 @@ struct StartupConfig {
   // checks the second is still shown, and quits. Implies smoke_test.
   bool tab_smoke_test{false};
   // Like smoke_test, but loads a built-in test page, sends keys, checks that
-  // Normal-mode bindings are consumed and Insert mode follows a focused text
-  // field, and quits. Implies smoke_test.
+  // Normal-mode bindings are consumed, Insert mode follows a focused text
+  // field, and the scroll bindings move the page, and quits. Implies smoke_test.
   bool key_smoke_test{false};
 };
 

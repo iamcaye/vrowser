@@ -154,5 +154,35 @@ TEST(CommandRegistryTest, RunByNameUsesArguments) {
   EXPECT_EQ(registry.Run("missing", {}).error(), "Unknown command: missing");
 }
 
+TEST(CommandRegistryTest, CountedCommandRunsOnceWithTheCount) {
+  CommandRegistry registry;
+  std::vector<int> counts;
+  ASSERT_TRUE(registry.RegisterCounted("scroll-down", "Scroll down",
+                                       [&counts](const Args&, int count) {
+                                         counts.push_back(count);
+                                         return CommandResult::Ok();
+                                       }));
+
+  EXPECT_TRUE(registry.Run("scroll-down", {}, 5, true).ok());
+  EXPECT_TRUE(registry.Run("scroll-down", {}).ok());
+  // A count that was not typed is not passed on.
+  EXPECT_TRUE(registry.Run("scroll-down", {}, 4, false).ok());
+  EXPECT_TRUE(registry.Execute("scroll-down").ok());
+  EXPECT_EQ(counts, (std::vector<int>{5, 1, 1, 1}));
+}
+
+TEST(CommandRegistryTest, CountedCommandFollowsRegisterRules) {
+  CommandRegistry registry;
+  const auto ok = [](const Args&, int) { return CommandResult::Ok(); };
+  EXPECT_FALSE(registry.RegisterCounted("", "Empty", ok));
+  EXPECT_FALSE(registry.RegisterCounted("a b", "Space", ok));
+  EXPECT_FALSE(registry.RegisterCounted("none", "No handler", {}));
+  ASSERT_TRUE(registry.RegisterCounted("top", "Top", ok));
+  EXPECT_FALSE(registry.RegisterCounted("top", "Again", ok));
+  EXPECT_FALSE(registry.Register(
+      "top", "Plain", [](const Args&) { return CommandResult::Ok(); }));
+  EXPECT_EQ(registry.Description("top"), "Top");
+}
+
 }  // namespace
 }  // namespace vrowser

@@ -18,6 +18,7 @@
 #include "include/wrapper/cef_helpers.h"
 #include "browser/cef/cef_renderer_app.hpp"
 #include "browser/cef/views_delegates.hpp"
+#include "vrowser/vim/default_bindings.hpp"
 #include "vrowser/vim/key_event.hpp"
 
 namespace vrowser {
@@ -85,18 +86,62 @@ void CefBrowserClient::RegisterCommands() {
   // the UI thread from OnPreKeyEvent.
   commands_.Register("reload", "Reload the current page",
                      [this](const std::vector<std::string>&) {
-                       if (CefRefPtr<CefBrowser> browser = ActiveBrowser()) {
+                       if (CefRefPtr<CefBrowser> browser = CommandBrowser()) {
                          browser->Reload();
                        }
                        return CommandResult::Ok();
                      });
-  bindings_.Bind(Mode::kNormal, "r", "reload");
+  struct ScrollCommand {
+    const char* name;
+    const char* description;
+    ScrollMotion motion;
+  };
+  static constexpr ScrollCommand kScrollCommands[] = {
+      {"scroll-down", "Scroll down one line step", ScrollMotion::kLineDown},
+      {"scroll-up", "Scroll up one line step", ScrollMotion::kLineUp},
+      {"scroll-half-page-down", "Scroll down half a page",
+       ScrollMotion::kHalfPageDown},
+      {"scroll-half-page-up", "Scroll up half a page",
+       ScrollMotion::kHalfPageUp},
+      {"scroll-to-top", "Scroll to the top of the page", ScrollMotion::kTop},
+      {"scroll-to-bottom", "Scroll to the bottom of the page",
+       ScrollMotion::kBottom},
+  };
+  for (const ScrollCommand& command : kScrollCommands) {
+    const ScrollMotion motion = command.motion;
+    commands_.RegisterCounted(
+        command.name, command.description,
+        [this, motion](const std::vector<std::string>&, int count) {
+          ScrollFocusedFrame(motion, count);
+          return CommandResult::Ok();
+        });
+  }
+  CHECK(AddDefaultBindings(bindings_));
 }
 
-void CefBrowserClient::RunBinding(const KeyDispatch& dispatch) {
+void CefBrowserClient::ScrollFocusedFrame(ScrollMotion motion, int count) {
+  CEF_REQUIRE_UI_THREAD();
+  CefRefPtr<CefBrowser> browser = CommandBrowser();
+  if (!browser) {
+    return;
+  }
+  CefRefPtr<CefFrame> frame = browser->GetFocusedFrame();
+  if (!frame) {
+    frame = browser->GetMainFrame();
+  }
+  // Runs in the page's main world. The script holds only constants and the
+  // count, so no page or user text is evaluated. A page that redefines
+  // window.scrollBy only breaks scrolling for itself.
+  frame->ExecuteJavaScript(ScrollScript(motion, count), "", 0);
+}
+
+void CefBrowserClient::RunBinding(CefRefPtr<CefBrowser> browser,
+                                  const KeyDispatch& dispatch) {
+  key_target_ = browser;
   const CommandResult result =
       commands_.Run(dispatch.action->command, dispatch.action->args,
                     dispatch.count, dispatch.has_count);
+  key_target_ = nullptr;
   std::fprintf(
       stderr, "vrowser: command %s%s%s\n", dispatch.action->command.c_str(),
       result.ok() ? "" : " failed: ", std::string(result.error()).c_str());
@@ -157,7 +202,7 @@ bool CefBrowserClient::OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
     }
   }
   if (dispatch.action) {
-    RunBinding(dispatch);
+    RunBinding(browser, dispatch);
   }
   return dispatch.disposition == KeyDisposition::kConsume;
 }
@@ -455,6 +500,10 @@ CefRefPtr<CefBrowser> CefBrowserClient::FindBrowser(TabId id) const {
   return nullptr;
 }
 
+CefRefPtr<CefBrowser> CefBrowserClient::CommandBrowser() const {
+  return key_target_ ? key_target_ : ActiveBrowser();
+}
+
 CefRefPtr<CefBrowser> CefBrowserClient::ActiveBrowser() const {
   if (const std::optional<TabId> active = tabs_.active()) {
     if (CefRefPtr<CefBrowser> browser = FindBrowser(*active)) {
@@ -543,54 +592,57 @@ void CefBrowserClient::FinishSmoke(int code) {
 namespace vrowser {
 
 std::string CefBrowserClient::KeySmokePageUrl() {
-  // Logs every keydown the page sees into the title, with the focused id.
+  // Logs every keydown the page sees into the title, with the focused id, and
+  // every scroll as "scroll:<y>", "scroll:half" (half a viewport down), or
+  // "scroll:bottom". The spacer makes the page taller than the window.
   return DataUri(
       "<!doctype html><title>ready</title><input id=f>"
+      "<div style=\"height:5000px\"></div>"
       "<script>addEventListener('keydown', e => { document.title = 'key:' + "
       "e.key + ':' + (document.activeElement.id || 'body'); }, true);"
+      "addEventListener('scroll', () => { const y = scrollY;"
+      " const max = document.scrollingElement.scrollHeight - innerHeight;"
+      " document.title = 'scroll:' + (y > 0 && y >= max - 1 ? 'bottom'"
+      " : Math.abs(y - innerHeight / 2) <= 1 ? 'half' : Math.round(y)); });"
       "</script>",
       "text/html");
 }
 
-void CefBrowserClient::SendTestKey(CefRefPtr<CefBrowser> browser,
-                                   int windows_key_code,
-                                   int mac_key_code,
-                                   int linux_key_code,
-                                   char16_t character) {
+void CefBrowserClient::SendTestKey(CefRefPtr<CefBrowser> browser, TestKey key) {
   CefRefPtr<CefBrowserHost> host = browser->GetHost();
   host->SetFocus(true);
 #if defined(OS_MAC)
   // CefBrowserHost::SendKeyEvent trips a Chromium DCHECK for windowed
   // browsers on macOS, so send a native event instead.
-  (void)windows_key_code;
-  (void)linux_key_code;
-  PlatformSendTestKey(browser, mac_key_code, character);
+  PlatformSendTestKey(browser, key);
 #else
   // Linux windowed CEF reports X11 keycodes (evdev code + 8), not macOS
   // virtual key codes. A focused field drops a key whose native code is
   // wrong even when the same event reaches the page body. Windows uses the
   // virtual key as the native code; this path has not been run there.
-  (void)mac_key_code;
   CefKeyEvent event;
-  event.windows_key_code = windows_key_code;
+  event.windows_key_code = key.windows_key_code;
 #if defined(OS_LINUX)
-  event.native_key_code = linux_key_code;
+  event.native_key_code = key.linux_key_code;
 #else
-  event.native_key_code = windows_key_code;
-  (void)linux_key_code;
+  event.native_key_code = key.windows_key_code;
 #endif
-  event.character = character;
-  event.unmodified_character = character;
+  event.modifiers = key.shift ? EVENTFLAG_SHIFT_DOWN : 0;
+  event.character = key.character;
+  event.unmodified_character =
+      key.shift && key.character >= u'A' && key.character <= u'Z'
+          ? static_cast<char16_t>(key.character - u'A' + u'a')
+          : key.character;
   event.type = KEYEVENT_RAWKEYDOWN;
   host->SendKeyEvent(event);
-  if (character >= 0x20) {
+  if (key.character >= 0x20) {
     // Linux CHAR events carry the character in windows_key_code, not the
     // virtual key. Sending the virtual key here skips the DOM keydown once
     // an editor is focused.
     event.type = KEYEVENT_CHAR;
-    event.windows_key_code = character;
+    event.windows_key_code = key.character;
     host->SendKeyEvent(event);
-    event.windows_key_code = windows_key_code;
+    event.windows_key_code = key.windows_key_code;
   }
   event.type = KEYEVENT_KEYUP;
   host->SendKeyEvent(event);
@@ -613,70 +665,86 @@ void CefBrowserClient::KeySmokeStep(CefRefPtr<CefBrowser> browser,
     FinishSmoke(1);
     return;
   }
-  if (event == "title key:r:body" || event.starts_with("title key:Escape")) {
+  // From step 7 on every key is a bound motion, so the page must see none.
+  constexpr int kFirstScrollStep = 7;
+  if (event == "title key:r:body" || event.starts_with("title key:Escape") ||
+      (key_smoke_step_ >= kFirstScrollStep &&
+       event.starts_with("title key:"))) {
     std::fprintf(stderr, "vrowser-smoke: keys failed, page saw %s\n",
                  event.c_str());
     FinishSmoke(1);
     return;
   }
-  constexpr int kVkX = 'X', kMacX = 7, kLinuxX = 53;
-  constexpr int kVkR = 'R', kMacR = 15, kLinuxR = 27;
-  constexpr int kVkEscape = 0x1B, kMacEscape = 53, kLinuxEscape = 9;
+  // Windows virtual key, macOS key code, X11 keycode, character.
+  static constexpr TestKey kX{'X', 7, 53, u'x'};
+  static constexpr TestKey kR{'R', 15, 27, u'r'};
+  static constexpr TestKey kEscape{0x1B, 53, 9, 0x1B};
+  static constexpr TestKey kJ{'J', 38, 44, u'j'};
+  static constexpr TestKey kK{'K', 40, 45, u'k'};
+  static constexpr TestKey kD{'D', 2, 40, u'd'};
+  static constexpr TestKey kU{'U', 32, 30, u'u'};
+  static constexpr TestKey kG{'G', 5, 42, u'g'};
+  static constexpr TestKey kShiftG{'G', 5, 42, u'G', true};
+  static constexpr TestKey k3{'3', 20, 12, u'3'};
 
   struct Step {
     const char* wait_for;
     const char* note;
+    // Keys typed once `wait_for` arrives, in order. Steps 2, 3, and the last
+    // step act differently; see the switch below.
+    TestKey keys[2];
+    int key_count;
   };
   static constexpr Step kSteps[] = {
-      {"load-end", "page loaded; unbound x goes to the page"},
-      {"title key:x:body", "bound r reloads and stays out of the page"},
-      {"load-end", "reloaded; focus the text field"},
-      {"mode insert", "Insert mode; r goes to the field"},
-      {"title key:r:f", "Escape leaves Insert"},
-      {"mode normal", "Normal mode; x goes to the page, Escape did not"},
-      {"title key:x:f", "done"},
+      {"load-end", "page loaded; unbound x goes to the page", {kX}, 1},
+      {"title key:x:body",
+       "bound r reloads and stays out of the page",
+       {kR},
+       1},
+      {"load-end", "reloaded; focus the text field", {}, 0},
+      {"mode insert", "Insert mode; r goes to the field", {kR}, 1},
+      {"title key:r:f", "Escape leaves Insert", {kEscape}, 1},
+      {"mode normal",
+       "Normal mode; x goes to the page, Escape did not",
+       {kX},
+       1},
+      {"title key:x:f", "j scrolls one line step", {kJ}, 1},
+      {"title scroll:60", "3j scrolls three line steps", {k3, kJ}, 2},
+      {"title scroll:240", "k scrolls up one line step", {kK}, 1},
+      {"title scroll:180", "G scrolls to the bottom", {kShiftG}, 1},
+      {"title scroll:bottom", "gg scrolls to the top", {kG, kG}, 2},
+      {"title scroll:0", "d scrolls half a page down", {kD}, 1},
+      {"title scroll:half", "u scrolls half a page up", {kU}, 1},
+      {"title scroll:0", "done", {}, 0},
   };
-  if (key_smoke_step_ >= static_cast<int>(std::size(kSteps)) ||
+  constexpr int kStepCount = static_cast<int>(std::size(kSteps));
+  if (key_smoke_step_ >= kStepCount ||
       event != kSteps[key_smoke_step_].wait_for) {
     return;
   }
-  std::fprintf(stderr, "vrowser-smoke: step %d %s: %s\n", key_smoke_step_,
-               event.c_str(), kSteps[key_smoke_step_].note);
-  switch (key_smoke_step_++) {
-    case 0:
-      CefPostTask(TID_UI, base::BindOnce(&CefBrowserClient::SendTestKey, this,
-                                         browser, kVkX, kMacX, kLinuxX, u'x'));
-      break;
-    case 1:
-      CefPostTask(TID_UI, base::BindOnce(&CefBrowserClient::SendTestKey, this,
-                                         browser, kVkR, kMacR, kLinuxR, u'r'));
-      break;
-    case 2:
-      browser->GetMainFrame()->ExecuteJavaScript(
-          "document.getElementById('f').focus()", "", 0);
-      break;
-    case 3:
-      // OnFocusedNodeChanged can arrive before the editor is ready to take a
-      // key. Sending immediately is flaky on Linux: the event is forwarded
-      // but never becomes a DOM keydown. A short delay lets focus settle.
-      CefPostDelayedTask(TID_UI,
-                         base::BindOnce(&CefBrowserClient::SendTestKey, this,
-                                        browser, kVkR, kMacR, kLinuxR, u'r'),
-                         200);
-      break;
-    case 4:
-      CefPostTask(TID_UI,
-                  base::BindOnce(&CefBrowserClient::SendTestKey, this, browser,
-                                 kVkEscape, kMacEscape, kLinuxEscape, 0x1B));
-      break;
-    case 5:
-      CefPostTask(TID_UI, base::BindOnce(&CefBrowserClient::SendTestKey, this,
-                                         browser, kVkX, kMacX, kLinuxX, u'x'));
-      break;
-    case 6:
-      std::fprintf(stderr, "vrowser-smoke: keys ok\n");
-      FinishSmoke(0);
-      break;
+  const int index = key_smoke_step_++;
+  const Step& step = kSteps[index];
+  std::fprintf(stderr, "vrowser-smoke: step %d %s: %s\n", index, event.c_str(),
+               step.note);
+  if (index == kStepCount - 1) {
+    std::fprintf(stderr, "vrowser-smoke: keys ok\n");
+    FinishSmoke(0);
+    return;
+  }
+  if (index == 2) {
+    browser->GetMainFrame()->ExecuteJavaScript(
+        "document.getElementById('f').focus()", "", 0);
+    return;
+  }
+  // OnFocusedNodeChanged can arrive before the editor is ready to take a key.
+  // Sending immediately is flaky on Linux: the event is forwarded but never
+  // becomes a DOM keydown. A short delay after focus lets it settle.
+  const int64_t delay_ms = index == 3 ? 200 : 0;
+  for (int i = 0; i < step.key_count; ++i) {
+    CefPostDelayedTask(TID_UI,
+                       base::BindOnce(&CefBrowserClient::SendTestKey, this,
+                                      browser, step.keys[i]),
+                       delay_ms);
   }
 }
 

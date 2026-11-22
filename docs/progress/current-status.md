@@ -31,8 +31,10 @@ started.
   yet.
 - Normal and Insert modes in the window: Normal-mode bindings are consumed
   before the page sees them, a focused text field switches the tab to Insert,
-  and Escape returns to Normal. One binding so far: `r` reloads. A count
-  repeats the command (`3r` reloads three times). OS key repeat does not.
+  and Escape returns to Normal. Bindings: `r` reloads, `j`/`k` scroll a line
+  step, `d`/`u` half a page, `gg`/`G` to the top and bottom of the focused
+  frame. A count repeats `r` (`3r`) and multiplies a scroll step (`5j`).
+  OS key repeat does not.
   A main-frame load drops consumed key-up tracking, and editable focus clears
   a pending key sequence.
 - clang-format (C++ and Objective-C), clang-tidy config, editorconfig.
@@ -62,7 +64,7 @@ Clang 21.0.0, Ninja 1.13.2.
 
 | Check | Result |
 | --- | --- |
-| `cmake --preset ci && cmake --build --preset ci && ctest --preset ci` | 95 tests passed |
+| `cmake --preset ci && cmake --build --preset ci && ctest --preset ci` | 119 tests passed |
 | `ctest --test-dir build/debug` | 9 tests passed (older local debug tree) |
 | `cmake --preset debug && cmake --build --preset debug` | Built `Vrowser.app` and five helper bundles |
 | CEF macOS arm64 archive SHA256 | `22a510e5d348a907953278b618e1e9e442ccf78773b9fee0e09eaf154eef53b0` |
@@ -70,7 +72,7 @@ Clang 21.0.0, Ninja 1.13.2.
 | Relaunch with `--url=https://www.iana.org/help/example-domains` into a running app | `vrowser: load-end 200 https://www.iana.org/help/example-domains` in the first process |
 | `just tab-smoke` (`--vrowser-tab-smoke-test --use-alloy-style`) | two tabs loaded, first closed, `vrowser-smoke: tabs ok, 1 open, remaining visible`, exit 0 |
 | `--vrowser-tab-smoke-test` in Chrome style | `vrowser: tabs need --use-alloy-style`, exit 1 (second Chrome-style browser view is never created) |
-| `just key-smoke` (`--vrowser-key-smoke-test`, Chrome style) | unbound `x` reached the page, `r` ran `reload` and did not, focused field selected Insert, Escape returned to Normal and did not reach the page; `vrowser-smoke: keys ok`, exit 0 |
+| `just key-smoke` (`--vrowser-key-smoke-test`, Chrome style) | unbound `x` reached the page, `r` ran `reload` and did not, focused field selected Insert, Escape returned to Normal and did not reach the page; `j` 60, `3j` 240, `k` 180, `G` bottom, `gg` 0, `d` half a viewport, `u` 0, no motion key reached the page; `vrowser-smoke: keys ok`, exit 0 |
 | `--vrowser-key-smoke-test --use-alloy-style` | not supported: synthesized keys never reach Alloy pages, even without a keyboard handler; exits 1 with a message |
 | Real keyboard, Chrome style and `--use-alloy-style` (manual, `https://duckduckgo.com`) | `r` reloads and stays out of the page, a focused field selects Insert and types `r`, Escape returns to Normal and does not reach the field, the next `r` reloads; `3r` reloads three times; a held `r` reloads once; Cmd+L and unbound keys still reach the browser and page |
 | Chrome-style smoke (`--vrowser-smoke-test`) | exit 0, `vrowser-smoke: ok 200` |
@@ -109,7 +111,10 @@ checked on this branch after the key-dispatch fixes:
 - Chrome style shows Chromium's toolbar. The Vim shell should move to Alloy
   style after the UI gaps listed in
   [runtime-style.md](../architecture/runtime-style.md) are closed.
-- No tabs, commands, history, or bookmarks.
+- No tab strip, command line, history, or bookmarks.
+- Scrolling moves the focused frame's document. A page that scrolls an inner
+  element instead of the document does not move, and a focused iframe that
+  cannot scroll does not hand the motion to its parent.
 - The macOS helpers are ad-hoc signed by the linker. A release package still
   needs a real signing and notarization pass.
 - GoogleTest is fetched as the v1.16.0 tag. The desktop shell is pinned by
@@ -127,12 +132,12 @@ Vim shell. Details in
 
 ## Next unblocked work
 
-Normal and Insert modes work in the window (#18). Scrolling from Normal mode
-(#19) adds the first real bindings. Following focus into iframes (#23) and
+Normal and Insert modes work in the window (#18), and Normal mode scrolls
+the page (#19). Following focus into iframes (#23) and
 keyboard tab switching (#32) build on the same dispatcher. Real typing was
 checked by hand on macOS in both Chrome and Alloy styles. Permission handling should follow
 Alloy's client-owned prompt path.
 
 ## Recommended next task
 
-[Scroll the page from Normal mode](https://github.com/iamcaye/vrowser/issues/19).
+[Switch tabs from the keyboard](https://github.com/iamcaye/vrowser/issues/32).

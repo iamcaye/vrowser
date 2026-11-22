@@ -11,6 +11,7 @@
 #include "include/views/cef_browser_view.h"
 #include "include/views/cef_window.h"
 #include "vrowser/core/navigation.hpp"
+#include "vrowser/core/scroll.hpp"
 #include "vrowser/core/startup_config.hpp"
 #include "vrowser/commands/command_registry.hpp"
 #include "vrowser/core/tab_list.hpp"
@@ -92,26 +93,35 @@ class CefBrowserClient : public CefClient,
   void PlatformTitleChange(CefRefPtr<CefBrowser> browser,
                            const CefString& title);
   void PlatformShowWindow(CefRefPtr<CefBrowser> browser);
+  // A key the key smoke test types, with its code on each platform.
+  struct TestKey {
+    int windows_key_code;
+    int mac_key_code;
+    int linux_key_code;
+    char16_t character;
+    bool shift = false;
+  };
+
   // macOS only: delivers a synthesized NSEvent key-down and key-up to the
   // browser's window, which takes the same path as a typed key.
-  void PlatformSendTestKey(CefRefPtr<CefBrowser> browser,
-                           int mac_key_code,
-                           char16_t character);
+  void PlatformSendTestKey(CefRefPtr<CefBrowser> browser, const TestKey& key);
   void LoadInMainFrame(const std::string& url);
   CefRefPtr<CefBrowser> FindBrowser(TabId id) const;
   CefRefPtr<CefBrowser> ActiveBrowser() const;
+  // The browser a command acts on: the one whose key ran it, or the active
+  // tab when no key is being handled.
+  CefRefPtr<CefBrowser> CommandBrowser() const;
   // Shows the active tab's view and hides the other tabs' views.
   void ShowActiveTab();
   void TabSmokeLoadEnd(CefRefPtr<CefBrowser> browser);
   void TabSmokeClosed(TabId id);
   void RegisterCommands();
+  // Scrolls the focused frame of CommandBrowser(), or its main frame when no
+  // frame has focus.
+  void ScrollFocusedFrame(ScrollMotion motion, int count);
   void KeySmokeStep(CefRefPtr<CefBrowser> browser, const std::string& event);
-  void SendTestKey(CefRefPtr<CefBrowser> browser,
-                   int windows_key_code,
-                   int mac_key_code,
-                   int linux_key_code,
-                   char16_t character);
-  void RunBinding(const KeyDispatch& dispatch);
+  void SendTestKey(CefRefPtr<CefBrowser> browser, TestKey key);
+  void RunBinding(CefRefPtr<CefBrowser> browser, const KeyDispatch& dispatch);
   void OnSmokeTimeout();
   void FinishSmoke(int code);
 
@@ -141,6 +151,8 @@ class CefBrowserClient : public CefClient,
   std::map<TabId, KeyInputState> key_inputs_;
   KeyBindings bindings_;
   CommandRegistry commands_;
+  // Set only while RunBinding runs a command. UI thread only.
+  CefRefPtr<CefBrowser> key_target_;
 
   IMPLEMENT_REFCOUNTING(CefBrowserClient);
 };
