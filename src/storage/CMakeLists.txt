@@ -11,22 +11,33 @@ FetchContent_MakeAvailable(sqlite_amalgamation)
 
 find_package(Threads REQUIRED)
 
-add_library(vrowser_sqlite STATIC
-  "${sqlite_amalgamation_SOURCE_DIR}/sqlite3.c")
-target_include_directories(vrowser_sqlite SYSTEM PUBLIC
-  "${sqlite_amalgamation_SOURCE_DIR}")
-# Extensions are never loaded, and double-quoted strings are not identifiers.
-target_compile_definitions(vrowser_sqlite PRIVATE
-  SQLITE_OMIT_LOAD_EXTENSION
-  SQLITE_DQS=0
-  SQLITE_DEFAULT_FOREIGN_KEYS=1
-  SQLITE_OMIT_DEPRECATED)
-target_link_libraries(vrowser_sqlite PUBLIC Threads::Threads)
-if(UNIX AND NOT APPLE)
-  target_link_libraries(vrowser_sqlite PUBLIC m)
+function(vrowser_add_sqlite target)
+  add_library(${target} STATIC "${sqlite_amalgamation_SOURCE_DIR}/sqlite3.c")
+  target_include_directories(${target} SYSTEM PUBLIC
+    "${sqlite_amalgamation_SOURCE_DIR}")
+  # Extensions are never loaded, and double-quoted strings are not identifiers.
+  target_compile_definitions(${target} PRIVATE
+    SQLITE_OMIT_LOAD_EXTENSION
+    SQLITE_DQS=0
+    SQLITE_DEFAULT_FOREIGN_KEYS=1
+    SQLITE_OMIT_DEPRECATED)
+  target_link_libraries(${target} PUBLIC Threads::Threads)
+  if(UNIX AND NOT APPLE)
+    target_link_libraries(${target} PUBLIC m)
+  endif()
+endfunction()
+
+vrowser_add_sqlite(vrowser_sqlite)
+
+# The CEF app links the static C runtime (/MT, /MTd), so on Windows it needs a
+# SQLite built the same way. Tests keep the default dynamic runtime.
+if(MSVC)
+  vrowser_add_sqlite(vrowser_sqlite_static_crt)
+  set_target_properties(vrowser_sqlite_static_crt PROPERTIES
+    MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
-add_library(vrowser_storage STATIC migrations.cpp)
+add_library(vrowser_storage STATIC history.cpp migrations.cpp)
 target_include_directories(vrowser_storage PUBLIC
   "${PROJECT_SOURCE_DIR}/include")
 target_link_libraries(vrowser_storage PRIVATE vrowser_sqlite)

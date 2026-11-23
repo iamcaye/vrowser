@@ -6,7 +6,7 @@ Updated: 2026-11-23
 
 M0 (project foundation) and the first slice of M1 (one CEF window that loads
 a page) are implemented locally, along with Vim input and tabs. Storage has
-the SQLite migration runner but no tables. Plugins are not started.
+the SQLite migration runner and browsing history. Plugins are not started.
 
 ## Implemented
 
@@ -26,8 +26,8 @@ the SQLite migration runner but no tables. Plugins are not started.
 - GoogleTest tests for startup switches, the command registry, mode
   transitions, key normalization, key bindings, counts, navigation
   requests, command-line URL classification, the tab list, key
-  dispatch, SQLite migrations against temporary database files, and the
-  user config file.
+  dispatch, SQLite migrations and history against temporary database
+  files, and the user config file.
 - A second launch with `--url` loads that URL in the running window.
 - Core `TabList` and tabs in the main window (Alloy style only): each tab is a
   browser view under a fill layout, only the active one is visible, closing a
@@ -72,8 +72,12 @@ the SQLite migration runner but no tables. Plugins are not started.
   version in `PRAGMA user_version`, and rolls back a failing migration
   without advancing it. SQLite 3.54.1 is the official amalgamation, fetched
   by CMake and pinned by SHA3-256, built with extension loading off. The
-  database file itself may not be a symlink. Not wired into the browser
-  yet; no tables.
+  database file itself may not be a symlink.
+- History: `vrowser.db` in the profile directory records each committed
+  main-frame `http`/`https` navigation (URL, title, time). Subframes, error
+  pages, and internal pages are skipped. If the database cannot be opened,
+  browsing continues and the status bar says history is off. Writes run on
+  the UI thread; each is one small insert. No history UI yet.
 - clang-format (C++ and Objective-C), clang-tidy config, editorconfig.
 - GitHub Actions workflow that runs the unit tests on Linux, macOS, and
   Windows. Run [44557827020](https://github.com/iamcaye/vrowser/actions/runs/44557827020)
@@ -101,7 +105,7 @@ Clang 21.0.0, Ninja 1.13.2.
 
 | Check | Result |
 | --- | --- |
-| `cmake --preset ci && cmake --build --preset ci && ctest --preset ci` | 219 tests passed (includes 25 user-config tests) |
+| `cmake --preset ci && cmake --build --preset ci && ctest --preset ci` | 228 tests passed (includes 25 user-config and 9 history tests) |
 | `ctest --test-dir build/debug` | 9 tests passed (older local debug tree) |
 | `cmake --preset debug && cmake --build --preset debug` | Built `Vrowser.app` and five helper bundles |
 | CEF macOS arm64 archive SHA256 | `22a510e5d348a907953278b618e1e9e442ccf78773b9fee0e09eaf154eef53b0` |
@@ -128,6 +132,7 @@ Clang 21.0.0, Ninja 1.13.2.
 | CEF Windows workflow (`cef-windows.yml` on `windows-latest`) | Built `vrowser.exe` (bootstrap) and `vrowser.dll`; sandbox left ON |
 | User config, `--vrowser-smoke-test --use-mock-keychain` with a profile `vrowserrc` | invalid file: `vrowser: config: vrowserrc:2: Unknown command: no-such-command`, page still loads, exit 0; valid file: no error, exit 0 |
 | `--vrowser-key-smoke-test` with `map j scroll-up` / `map k scroll-down` | stops at "j scrolls one line step" (remapped `j` does not scroll down); the same run without a config passes, `keys ok` |
+| History, two `--vrowser-smoke-test` launches on one profile (`example.com`, then `iana.org/help/example-domains`) | `vrowser.db` at schema 1 holds both rows with titles `Example Domain` and `Example Domains`; the first row survived the restart |
 | `--vrowser-key-smoke-test` with `command top-reload scroll-to-top \| reload` and `map Q top-reload` | config loads without error, `keys ok`; `command bad scroll-to-top \| nope` logs `vrowserrc:1: Unknown command: nope` |
 | `tools/check_mac_bundle.sh` against debug `Vrowser.app` | passed |
 | `tools/check_mac_bundle.sh` against missing-helper fixture | failed as expected |
