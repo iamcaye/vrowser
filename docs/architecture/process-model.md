@@ -74,10 +74,33 @@ future work and will require a real `CefApp` in the helper.
 
 `ConfigureCefSettings` sets three absolute paths under the user-data directory:
 
-- `root_cache_path` and `cache_path`: the profile root. CEF 120 and newer use
-  `root_cache_path` as the singleton lock. CEF 156 ignores a custom child of
-  `cache_path` and stores the default profile under that root.
-- `log_file`: `vrowser.log` in the same directory. Severity is warning.
+- `root_cache_path`: the user-data directory itself. CEF 120 and newer use it
+  as the process singleton lock.
+- `cache_path`: the selected profile's directory (below).
+- `log_file`: `vrowser.log` in the user-data directory. Severity is warning.
+
+`--profile=<name>` selects a profile; the default is `default`. A name is 1
+to 64 of `a`-`z`, `0`-`9`, `_`, and `-`, and does not start with `-`. Any
+other name stops startup with status 1. Chromium only creates profiles that
+are direct children of the user-data directory, so:
+
+| Profile | Directory |
+| --- | --- |
+| `default` | `<user-data-dir>/Default` (Chromium's own name) |
+| any other `<name>` | `<user-data-dir>/Profile-<name>` |
+
+After CEF starts, the browser process creates one `CefRequestContext` with
+that directory as its `cache_path`. That context initializes asynchronously,
+and the first window opens in its `OnRequestContextInitialized`. Every tab
+is created with the same context, so cookies, cache, and local storage stay
+in that directory. Vrowser's `vrowser.db` lives there too. `vrowserrc` stays
+in the user-data directory and is shared by all profiles.
+
+Two processes cannot use one user-data directory at the same time, whatever
+their profiles. A second launch with the same `--user-data-dir` is forwarded
+to the running process (`OnAlreadyRunningAppRelaunch`), which opens the URL
+in its own profile. To run two profiles at once, give each process its own
+`--user-data-dir`.
 
 Default directory:
 

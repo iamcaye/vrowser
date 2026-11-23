@@ -14,6 +14,7 @@
 #include <string>
 
 #include "include/cef_client.h"
+#include "include/cef_request_context.h"
 #include "include/views/cef_browser_view.h"
 #include "include/views/cef_textfield.h"
 #include "include/views/cef_window.h"
@@ -105,6 +106,12 @@ class CefBrowserClient : public CefClient,
                    ErrorCode error_code,
                    const CefString& error_text,
                    const CefString& failed_url) override;
+
+  // The selected profile's context. New tabs are created in it. Set once,
+  // before the first browser.
+  void SetRequestContext(CefRefPtr<CefRequestContext> context) {
+    request_context_ = context;
+  }
 
   void ShowMainWindow();
   void CloseAllBrowsers(bool force_close);
@@ -269,6 +276,7 @@ class CefBrowserClient : public CefClient,
   // Visits in the profile database. Empty when it could not be opened.
   std::optional<HistoryRecorder> history_;
   std::set<TabId> loading_tabs_;
+  CefRefPtr<CefRequestContext> request_context_;
 
   IMPLEMENT_REFCOUNTING(CefBrowserClient);
 };

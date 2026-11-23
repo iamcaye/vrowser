@@ -20,6 +20,7 @@ add_executable(vrowser_unit_tests
   unit/migration_test.cpp
   unit/mode_machine_test.cpp
   unit/navigation_test.cpp
+  unit/profile_test.cpp
   unit/scroll_test.cpp
   unit/tab_list_test.cpp
   unit/url_input_test.cpp

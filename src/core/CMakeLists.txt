@@ -1,5 +1,6 @@
 add_library(vrowser_core STATIC
   navigation.cpp
+  profile.cpp
   scroll.cpp
   startup_config.cpp
   tab_list.cpp

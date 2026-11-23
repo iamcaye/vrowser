@@ -14,6 +14,9 @@ namespace vrowser {
 struct StartupConfig {
   std::string initial_url{"https://example.com"};
   std::filesystem::path user_data_dir;
+  // --profile=<name>. Checked by IsValidProfileName before use; an invalid
+  // name stops startup.
+  std::string profile{"default"};
   // Alloy style is the minimal window. The default follows cefsimple: the
   // Chrome bootstrap with the default (Chrome) runtime style.
   bool alloy_style{false};

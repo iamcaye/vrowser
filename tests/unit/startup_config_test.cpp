@@ -25,6 +25,13 @@ TEST(StartupConfigTest, UsesDocumentedDefaults) {
   EXPECT_FALSE(config.alloy_style);
   EXPECT_TRUE(config.use_views);
   EXPECT_FALSE(config.smoke_test);
+  EXPECT_EQ(config.profile, "default");
+}
+
+TEST(StartupConfigTest, ReadsProfile) {
+  EXPECT_EQ(Parse({"--profile=work"}).profile, "work");
+  EXPECT_EQ(Parse({"--profile", "home"}).profile, "home");
+  EXPECT_EQ(Parse({"--profile="}).profile, "default");
 }
 
 TEST(StartupConfigTest, ReadsUrlEqualsForm) {

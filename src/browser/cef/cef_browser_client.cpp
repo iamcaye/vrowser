@@ -20,6 +20,7 @@
 #include "browser/cef/cef_renderer_app.hpp"
 #include "browser/cef/views_delegates.hpp"
 #include "vrowser/config/user_config.hpp"
+#include "vrowser/core/profile.hpp"
 #include "vrowser/core/url_input.hpp"
 #include "vrowser/ui/status_line.hpp"
 #include "vrowser/vim/default_bindings.hpp"
@@ -163,7 +164,13 @@ CefBrowserClient::CefBrowserClient(const StartupConfig& config)
   navigation_.SetListener(
       [this](const std::string& url) { LoadInMainFrame(url); });
   RegisterCommands();
-  OpenHistory(config.user_data_dir);
+  // The profile database is per profile; vrowserrc is shared by all of them.
+  // ConfigureCefSettings has already rejected an invalid profile name.
+  std::error_code profile_error;
+  OpenHistory(ProfileDirectory(std::filesystem::absolute(config.user_data_dir,
+                                                         profile_error),
+                               config.profile)
+                  .value_or(config.user_data_dir));
   // A bad config keeps the defaults; the error shows in the status bar.
   const ConfigResult user_config = LoadUserConfig(
       config.user_data_dir / kUserConfigFileName, commands_, bindings_);
@@ -783,6 +790,7 @@ void CefBrowserClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
     // CefShutdown.
     status_bar_ = nullptr;
     command_line_ = nullptr;
+    request_context_ = nullptr;
     CefQuitMessageLoop();
   }
 }
@@ -959,7 +967,7 @@ void CefBrowserClient::OpenTab(const std::string& url) {
   std::fprintf(stderr, "vrowser: open-tab %s\n", url.c_str());
   // OnAfterCreated appends the new browser to tabs_ and shows it.
   tabs->AddChildView(CefBrowserView::CreateBrowserView(
-      this, url, browser_settings, nullptr, nullptr,
+      this, url, browser_settings, nullptr, request_context_,
       CreateBrowserViewDelegate(runtime_style)));
 }
 
