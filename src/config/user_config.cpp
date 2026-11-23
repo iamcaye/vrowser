@@ -158,7 +158,8 @@ ConfigResult ApplyUserConfig(std::string_view text,
                              std::string_view source,
                              CommandRegistry& commands,
                              KeyBindings& bindings) {
-  PendingConfig pending{.registry = &commands, .bindings = bindings};
+  PendingConfig pending{
+      .registry = &commands, .bindings = bindings, .commands = {}};
   int line_number = 0;
   size_t start = 0;
   while (start <= text.size()) {
