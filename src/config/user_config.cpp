@@ -3,6 +3,7 @@
 
 #include "vrowser/config/user_config.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <fstream>
 #include <iterator>
@@ -31,18 +32,38 @@ bool IsComment(const ParsedCommand& entry) {
          entry.name.front() == '#';
 }
 
+// A `command` entry, validated but not registered yet.
+struct CustomCommand {
+  std::string name;
+  std::vector<ParsedCommand> steps;
+};
+
+// Everything a config changes, applied only after every line is valid.
+struct PendingConfig {
+  const CommandRegistry* registry;
+  KeyBindings bindings;
+  std::vector<CustomCommand> commands;
+
+  [[nodiscard]] bool Knows(std::string_view name) const {
+    return registry->Contains(name) ||
+           std::ranges::any_of(commands, [name](const CustomCommand& command) {
+             return command.name == name;
+           });
+  }
+};
+
 // Applies one parsed `map` entry. Returns an empty string or the problem.
 std::string ApplyMap(const std::vector<std::string>& args,
-                     const CommandRegistry& commands,
-                     KeyBindings& bindings) {
+                     PendingConfig& config) {
   if (args.size() < 2) {
     return "map needs keys and a command";
   }
   const std::string& keys = args[0];
   const std::string& command = args[1];
-  if (!commands.Contains(command)) {
+  if (!config.Knows(command)) {
     return "Unknown command: " + command;
   }
+  KeyBindings& bindings = config.bindings;
   const std::optional<BindingAction> previous =
       bindings.Find(Mode::kNormal, keys);
   bindings.Unbind(Mode::kNormal, keys);
@@ -57,31 +78,88 @@ std::string ApplyMap(const std::vector<std::string>& args,
   return {};
 }
 
-std::string ApplyEntry(const ParsedCommand& entry,
-                       const CommandRegistry& commands,
-                       KeyBindings& bindings) {
+// `command <name> <step> [| <step>...]`, each step a command line.
+std::string ApplyCommand(const std::vector<std::string>& args,
+                         PendingConfig& config) {
+  if (args.size() < 2) {
+    return "command needs a name and at least one step";
+  }
+  CustomCommand command{.name = args.front(), .steps = {{}}};
+  if (config.Knows(command.name)) {
+    return "Command already exists: " + command.name;
+  }
+  for (auto it = args.begin() + 1; it != args.end(); ++it) {
+    if (*it == "|") {
+      command.steps.emplace_back();
+    } else if (command.steps.back().name.empty()) {
+      command.steps.back().name = *it;
+    } else {
+      command.steps.back().args.push_back(*it);
+    }
+  }
+  for (const ParsedCommand& step : command.steps) {
+    if (step.name.empty()) {
+      return "command " + command.name + " has an empty step";
+    }
+    // Only earlier commands are known, so a command cannot call itself.
+    if (!config.Knows(step.name)) {
+      return "Unknown command: " + step.name;
+    }
+  }
+  config.commands.push_back(std::move(command));
+  return {};
+}
+
+std::string ApplyEntry(const ParsedCommand& entry, PendingConfig& config) {
   if (entry.name == "map") {
-    return ApplyMap(entry.args, commands, bindings);
+    return ApplyMap(entry.args, config);
   }
   if (entry.name == "unmap") {
     if (entry.args.size() != 1) {
       return "unmap needs exactly one key sequence";
     }
-    if (!bindings.Unbind(Mode::kNormal, entry.args[0])) {
+    if (!config.bindings.Unbind(Mode::kNormal, entry.args[0])) {
       return "No mapping for " + entry.args[0];
     }
     return {};
   }
+  if (entry.name == "command") {
+    return ApplyCommand(entry.args, config);
+  }
   return "Unknown entry: " + entry.name;
+}
+
+// Registers a validated custom command. Its steps run through `registry`,
+// which must outlive it, and stop at the first error.
+void RegisterCustomCommand(CustomCommand command, CommandRegistry& registry) {
+  std::string description = "vrowserrc:";
+  for (const ParsedCommand& step : command.steps) {
+    description += (&step == &command.steps.front() ? " " : " | ") + step.name;
+  }
+  const bool registered = registry.Register(
+      command.name, description,
+      [&registry, steps = std::move(command.steps)](
+          const std::vector<std::string>& /*args*/) {
+        for (const ParsedCommand& step : steps) {
+          CommandResult result = registry.Run(step.name, step.args);
+          if (!result.ok()) {
+            return result;
+          }
+        }
+        return CommandResult::Ok();
+      });
+  // The name was checked against the registry while validating.
+  (void)registered;
 }
 
 }  // namespace
 
 ConfigResult ApplyUserConfig(std::string_view text,
                              std::string_view source,
-                             const CommandRegistry& commands,
+                             CommandRegistry& commands,
                              KeyBindings& bindings) {
-  KeyBindings updated = bindings;
+  PendingConfig pending{
+      .registry = &commands, .bindings = bindings, .commands = {}};
   int line_number = 0;
   size_t start = 0;
   while (start <= text.size()) {
@@ -93,7 +171,7 @@ ConfigResult ApplyUserConfig(std::string_view text,
     const ParsedCommand entry =
         ParseCommandLine(text.substr(start, end - start));
     if (!IsComment(entry)) {
-      std::string problem = ApplyEntry(entry, commands, updated);
+      std::string problem = ApplyEntry(entry, pending);
       if (!problem.empty()) {
         return {
             .ok = false,
@@ -103,12 +181,15 @@ ConfigResult ApplyUserConfig(std::string_view text,
     }
     start = end + 1;
   }
-  bindings = std::move(updated);
+  for (CustomCommand& command : pending.commands) {
+    RegisterCustomCommand(std::move(command), commands);
+  }
+  bindings = std::move(pending.bindings);
   return {};
 }
 
 ConfigResult LoadUserConfig(const std::filesystem::path& path,
-                            const CommandRegistry& commands,
+                            CommandRegistry& commands,
                             KeyBindings& bindings) {
   std::error_code ec;
   if (!std::filesystem::exists(path, ec)) {
