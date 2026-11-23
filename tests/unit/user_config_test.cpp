@@ -14,6 +14,8 @@
 
 #include "vrowser/commands/command_registry.hpp"
 #include "vrowser/vim/default_bindings.hpp"
+#include "vrowser/vim/key_dispatcher.hpp"
+#include "vrowser/vim/key_event.hpp"
 #include "vrowser/vim/key_bindings.hpp"
 #include "vrowser/vim/mode_machine.hpp"
 
@@ -30,6 +32,19 @@ class UserConfigTest : public ::testing::Test {
       ASSERT_TRUE(commands_.Register(
           name, "", [](const auto&) { return CommandResult::Ok(); }));
     }
+    ASSERT_TRUE(commands_.Register(
+        "log", "", [this](const std::vector<std::string>& args) {
+          std::string line;
+          for (const std::string& arg : args) {
+            line += (line.empty() ? "" : " ") + arg;
+          }
+          log_.push_back(line);
+          return CommandResult::Ok();
+        }));
+    ASSERT_TRUE(commands_.Register(
+        "fail", "", [](const std::vector<std::string>& /*args*/) {
+          return CommandResult::Error("failed on purpose");
+        }));
     ASSERT_TRUE(AddDefaultBindings(bindings_));
 
     static std::atomic<int> counter{0};
@@ -60,8 +75,10 @@ class UserConfigTest : public ::testing::Test {
   [[nodiscard]] const fs::path& dir() const { return dir_; }
   CommandRegistry& commands() { return commands_; }
   KeyBindings& bindings() { return bindings_; }
+  [[nodiscard]] const std::vector<std::string>& log() const { return log_; }
 
  private:
+  std::vector<std::string> log_;
   CommandRegistry commands_;
   KeyBindings bindings_;
   fs::path dir_;
@@ -169,11 +186,108 @@ TEST_F(UserConfigTest, OverridesAMultiKeyBinding) {
 
 TEST_F(UserConfigTest, OversizedFileIsRejected) {
   const ConfigResult result = LoadUserConfig(
-      WriteConfig(std::string(1024 * 1024 + 1, '#')), commands(), bindings());
+      WriteConfig(std::string((1024 * 1024) + 1, '#')), commands(), bindings());
 
   EXPECT_FALSE(result.ok);
   EXPECT_EQ(Normal("j"), (BindingAction{.command = "scroll-down"}));
 }
+
+TEST_F(UserConfigTest, CustomCommandRunsItsSequence) {
+  ASSERT_TRUE(Apply("command greet log hello world | log again\n").ok);
+
+  ASSERT_TRUE(commands().Contains("greet"));
+  EXPECT_TRUE(commands().Execute("greet").ok());
+  EXPECT_EQ(log(), (std::vector<std::string>{"hello world", "again"}));
+  EXPECT_EQ(commands().Description("greet"), "vrowserrc: log | log");
+}
+
+TEST_F(UserConfigTest, KeymapInvokesACustomCommandFromNormalMode) {
+  ASSERT_TRUE(Apply("command twice log one | log two\nmap Q twice\n").ok);
+  KeyInputState state;
+  ASSERT_EQ(state.mode.mode(), Mode::kNormal);
+
+  const KeyDispatch dispatch =
+      DispatchKey(bindings(), state,
+                  KeyEvent{.key = "Q", .character = U'Q', .key_down = true});
+
+  EXPECT_EQ(dispatch.disposition, KeyDisposition::kConsume);
+  ASSERT_TRUE(dispatch.action.has_value());
+  EXPECT_TRUE(commands()
+                  .Run(dispatch.action->command, dispatch.action->args,
+                       dispatch.count, dispatch.has_count)
+                  .ok());
+  EXPECT_EQ(log(), (std::vector<std::string>{"one", "two"}));
+}
+
+TEST_F(UserConfigTest, CustomCommandCanUseAnEarlierCustomCommand) {
+  ASSERT_TRUE(Apply("command a log a\ncommand b a | log b\n").ok);
+
+  EXPECT_TRUE(commands().Execute("b").ok());
+  EXPECT_EQ(log(), (std::vector<std::string>{"a", "b"}));
+}
+
+TEST_F(UserConfigTest, CustomCommandStopsAtTheFirstFailingStep) {
+  ASSERT_TRUE(Apply("command risky log before | fail | log after\n").ok);
+
+  const CommandResult result = commands().Execute("risky");
+
+  EXPECT_FALSE(result.ok());
+  EXPECT_EQ(result.error(), "failed on purpose");
+  EXPECT_EQ(log(), (std::vector<std::string>{"before"}));
+}
+
+struct InvalidCommandCase {
+  const char* text;
+  const char* error;
+};
+
+class InvalidCommandTest
+    : public UserConfigTest,
+      public ::testing::WithParamInterface<InvalidCommandCase> {};
+
+TEST_P(InvalidCommandTest, IsRejectedAndRegistersNothing) {
+  const ConfigResult result = Apply(GetParam().text);
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_EQ(result.error, GetParam().error);
+  EXPECT_FALSE(commands().Contains("custom"));
+  EXPECT_FALSE(Normal("Q").has_value());
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    Entries,
+    InvalidCommandTest,
+    ::testing::Values(
+        InvalidCommandCase{
+            .text = "command custom log ok | no-such-command",
+            .error = "vrowserrc:1: Unknown command: no-such-command",
+        },
+        // A command cannot call itself: only earlier commands are known.
+        InvalidCommandCase{
+            .text = "command custom custom",
+            .error = "vrowserrc:1: Unknown command: custom",
+        },
+        InvalidCommandCase{
+            .text = "command reload log x",
+            .error = "vrowserrc:1: Command already exists: reload",
+        },
+        InvalidCommandCase{
+            .text = "command custom log x\ncommand custom log y",
+            .error = "vrowserrc:2: Command already exists: custom",
+        },
+        InvalidCommandCase{
+            .text = "command custom log x | | log y",
+            .error = "vrowserrc:1: command custom has an empty step",
+        },
+        InvalidCommandCase{
+            .text = "command custom",
+            .error = "vrowserrc:1: command needs a name and at least one step",
+        },
+        // A valid command and keymap, then a bad line: neither applies.
+        InvalidCommandCase{
+            .text = "command custom log x\nmap Q custom\nmap j nope",
+            .error = "vrowserrc:3: Unknown command: nope",
+        }));
 
 }  // namespace
 }  // namespace vrowser
