@@ -58,9 +58,23 @@ focus. Enter runs the line through `CommandRegistry::Execute`; Escape, or
 focus leaving the line, closes it without running anything. Either way the
 tab returns to Normal and the page gets focus back. An error such as
 `Unknown command: foo` is shown in the status bar after the URL until the
-next key press. `open <url>` loads a URL in the current tab through
-`NavigationController`, which rejects empty and `javascript:` URLs; turning
-text into a URL or a search is #64. Chrome style has no command line yet.
+next key press. Chrome style has no command line yet.
+
+`o` and `O` open the line with `open ` and `tabopen ` already typed.
+`open <text>` loads in the current tab and `tabopen <text>` in a new one.
+`ClassifyUrlInput` (`src/core/url_input.cpp`, no CEF) turns the typed text
+into what to load:
+
+- `http://` and `https://` URLs, and `about:blank`, are used as typed;
+- a host (`example.com`, `localhost:8080`, `127.0.0.1`, `[::1]`), optionally
+  followed by a path, gets `https://`;
+- `javascript:`, `data:`, `file:`, `blob:`, `about:`, `view-source:`,
+  `chrome*:` schemes, and any other scheme followed by `//` are rejected with
+  `Cannot open <scheme>: URLs` in the status bar;
+- anything else, including text with spaces and other `word:text`, is a
+  DuckDuckGo search. The engine is a constant until there is a setting.
+
+`NavigationController` still rejects `javascript:` URLs as a second check.
 
 Punctuation keys (Windows OEM virtual keys) are named by their US-layout
 character without Shift (`;`), and the binding notation uses the typed

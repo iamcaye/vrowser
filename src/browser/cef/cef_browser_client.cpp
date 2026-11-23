@@ -18,6 +18,7 @@
 #include "include/wrapper/cef_helpers.h"
 #include "browser/cef/cef_renderer_app.hpp"
 #include "browser/cef/views_delegates.hpp"
+#include "vrowser/core/url_input.hpp"
 #include "vrowser/ui/status_line.hpp"
 #include "vrowser/vim/default_bindings.hpp"
 #include "vrowser/vim/key_event.hpp"
@@ -79,6 +80,7 @@ constexpr TestKey kTestShiftH{'H', 4, 43, u'H', true};
 constexpr TestKey kTestColon{0xBA, 41, 47, u':', true, u';'};
 constexpr TestKey kTestEnter{0x0D, 36, 36, 0x0D};
 constexpr TestKey kTestShiftL{'L', 37, 46, u'L', true};
+constexpr TestKey kTestO{'O', 31, 32, u'o'};
 
 struct ScrollCommand {
   const char* name;
@@ -102,6 +104,30 @@ std::optional<ScrollMotion> MotionForCommand(const std::string& command) {
     }
   }
   return std::nullopt;
+}
+
+// `open` and `tabopen`: joins the arguments back into the typed text and
+// turns it into a URL or a search. On success sets `url`.
+CommandResult ResolveOpenArgs(const char* command,
+                              const std::vector<std::string>& args,
+                              std::string& url) {
+  std::string text;
+  for (const std::string& arg : args) {
+    text += text.empty() ? arg : " " + arg;
+  }
+  const UrlInput input = ClassifyUrlInput(text);
+  switch (input.kind) {
+    case UrlInputKind::kEmpty:
+      return CommandResult::Error(std::string("Usage: ") + command +
+                                  " <url or search>");
+    case UrlInputKind::kRejected:
+      return CommandResult::Error(input.error);
+    case UrlInputKind::kUrl:
+    case UrlInputKind::kSearch:
+      break;
+  }
+  url = input.url;
+  return CommandResult::Ok();
 }
 
 // Keep-alives are throttled; OS repeat can be far faster than needed.
@@ -198,23 +224,36 @@ void CefBrowserClient::RegisterCommands() {
         }
         return CommandResult::Ok();
       });
+  // Arguments are typed into the line first: `o` runs `command-line open`.
   commands_.Register("command-line", "Open the command line",
-                     [this](const std::vector<std::string>&) {
-                       OpenCommandLine();
-                       return CommandResult::Ok();
-                     });
-  commands_.Register("open", "Load a URL in the current tab",
                      [this](const std::vector<std::string>& args) {
-                       if (args.size() != 1) {
-                         return CommandResult::Error("Usage: open <url>");
-                       }
-                       // NavigationController rejects empty and javascript:
-                       // URLs.
-                       if (!navigation_.Request(args[0])) {
-                         return CommandResult::Error("Cannot open: " + args[0]);
-                       }
+                       OpenCommandLine(args);
                        return CommandResult::Ok();
                      });
+  commands_.Register(
+      "open", "Load a URL, or search for text, in the current tab",
+      [this](const std::vector<std::string>& args) {
+        std::string url;
+        CommandResult result = ResolveOpenArgs("open", args, url);
+        // NavigationController still rejects javascript: URLs.
+        if (result.ok() && !navigation_.Request(url)) {
+          return CommandResult::Error("Cannot open: " + url);
+        }
+        return result;
+      });
+  commands_.Register(
+      "tabopen", "Load a URL, or search for text, in a new tab",
+      [this](const std::vector<std::string>& args) {
+        if (!alloy_style_) {
+          return CommandResult::Error("Tabs need --use-alloy-style");
+        }
+        std::string url;
+        CommandResult result = ResolveOpenArgs("tabopen", args, url);
+        if (result.ok()) {
+          OpenTab(url);
+        }
+        return result;
+      });
   CHECK(AddDefaultBindings(bindings_));
 }
 
@@ -249,7 +288,7 @@ void CefBrowserClient::AttachCommandLine(CefRefPtr<CefTextfield> command_line) {
   command_line_ = command_line;
 }
 
-void CefBrowserClient::OpenCommandLine() {
+void CefBrowserClient::OpenCommandLine(const std::vector<std::string>& args) {
   CEF_REQUIRE_UI_THREAD();
   CefRefPtr<CefBrowser> browser = CommandBrowser();
   if (!command_line_ || !command_line_->IsValid()) {
@@ -268,6 +307,14 @@ void CefBrowserClient::OpenCommandLine() {
   if (!command_line_->GetText().empty()) {
     command_line_->SelectAll(false);
     command_line_->ExecuteCommand(CEF_TFC_DELETE);
+  }
+  // Inserted at the cursor, so typing continues after the prefix.
+  std::string prefix;
+  for (const std::string& arg : args) {
+    prefix += arg + " ";
+  }
+  if (!prefix.empty()) {
+    command_line_->InsertOrReplaceText(prefix);
   }
   command_line_->SetVisible(true);
   if (CefRefPtr<CefWindow> window = command_line_->GetWindow()) {
@@ -942,8 +989,8 @@ void CefBrowserClient::ShowActiveTab() {
 //   3  `gT` wrapped to the second tab; type `x`.
 //   4  `x` closed the second tab; check the first is shown.
 //   5  macOS: the command line steps (CommandSmokeStep) end with
-//      `:open https://example.org/`. Elsewhere go straight to 7.
-//   6  example.org loaded from `:open`; check the status bar.
+//      `o` + `example.org`. Elsewhere go straight to 7.
+//   6  https://example.org loaded from `:open`; check the status bar.
 //   7  `x` closed the last tab; the process quits with 0.
 void CefBrowserClient::TabSmokeLoadEnd(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
@@ -959,8 +1006,8 @@ void CefBrowserClient::TabSmokeLoadEnd(CefRefPtr<CefBrowser> browser) {
     return;
   }
   if (tab_smoke_stage_ == 6 &&
-      browser->GetMainFrame()->GetURL().ToString().find("example.org") !=
-          std::string::npos) {
+      browser->GetMainFrame()->GetURL().ToString().find(
+          "https://example.org") != std::string::npos) {
     if (!TabSmokeStatusBarShows(browser)) {
       FinishSmoke(1);
       return;
@@ -1070,7 +1117,10 @@ void CefBrowserClient::TabSmokeCloseLast() {
 //   1  the line closed and the bar reports the unknown command; type `:`.
 //   2  the line is open; type `nope2` and Escape.
 //   3  the line closed and nothing ran; type `:`.
-//   4  the line is open; submit `open https://example.org/` (stage 6).
+//   4  the line is open; submit `open javascript:alert(1)`.
+//   5  the line closed and the bar reports the rejection; type `o`.
+//   6  the line is open with `open `; type `example.org` after it and
+//      submit (stage 6).
 void CefBrowserClient::CommandSmokeStep(int step) {
   CEF_REQUIRE_UI_THREAD();
   if (smoke_finished_) {
@@ -1104,7 +1154,15 @@ void CefBrowserClient::CommandSmokeStep(int step) {
       break;
     case 4:
       ok = CommandLineOpen();
-      text = "open https://example.org/";
+      text = "open javascript:alert(1)";
+      break;
+    case 5:
+      ok = !CommandLineOpen() && normal &&
+           bar.find("| Cannot open javascript: URLs") != std::string::npos;
+      key = kTestO;
+      break;
+    case 6:
+      ok = CommandLineOpen() && command_line_->GetText().ToString() == "open ";
       break;
   }
   std::fprintf(stderr, "vrowser-smoke: command step %d %s: \"%s\"\n", step,
@@ -1116,8 +1174,12 @@ void CefBrowserClient::CommandSmokeStep(int step) {
   if (text != nullptr) {
     command_line_->SetText(text);
   }
+  if (step == 6) {
+    // At the cursor, which must follow the prefix.
+    command_line_->InsertOrReplaceText("example.org");
+  }
   SendTestKeys(browser, {key});
-  if (step == 4) {
+  if (step == 6) {
     tab_smoke_stage_ = 6;
     return;
   }

@@ -182,7 +182,8 @@ class CefBrowserClient : public CefClient,
   // tab, wrapping, and shows and focuses the new tab.
   void SwitchTab(int steps);
   // `:`: puts the tab in Command mode and shows and focuses the command line.
-  void OpenCommandLine();
+  // `args`, followed by a space, are typed into it (`o` gives `open `).
+  void OpenCommandLine(const std::vector<std::string>& args);
   bool CommandLineOpen() const { return command_line_open_; }
   // Sets the window title from the active tab's current page.
   void ShowActiveTitle();

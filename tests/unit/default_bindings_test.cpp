@@ -65,6 +65,18 @@ TEST_F(DefaultBindingsTest, EachKeyRunsItsCommand) {
   }
 }
 
+TEST_F(DefaultBindingsTest, OpenKeysPrefillTheCommandLine) {
+  const KeyResolution open = Normal({"o"});
+  EXPECT_EQ(open.status, KeyStatus::kMatched);
+  EXPECT_EQ(open.action.command, "command-line");
+  EXPECT_EQ(open.action.args, std::vector<std::string>{"open"});
+
+  const KeyResolution tab_open = Normal({"O"});
+  EXPECT_EQ(tab_open.status, KeyStatus::kMatched);
+  EXPECT_EQ(tab_open.action.command, "command-line");
+  EXPECT_EQ(tab_open.action.args, std::vector<std::string>{"tabopen"});
+}
+
 TEST_F(DefaultBindingsTest, CountIsPassedWithTheMotion) {
   const KeyResolution down = Normal({"5", "j"});
   EXPECT_EQ(down.action.command, "scroll-down");

@@ -71,7 +71,7 @@ Switches:
 | `--use-native` | Platform window instead of CEF Views. |
 | `--vrowser-smoke-test` | Quit after the main frame reports a successful status. |
 | `--vrowser-key-smoke-test` | Load a built-in test page, send keys, check Normal-mode bindings are consumed, a focused field selects Insert, `j`, `3j`, `k`, `G`, `gg`, `d`, `u` scroll, a held `j` keeps scrolling and stops, and `H`/`L` go back and forward, and quit. Chrome style only. |
-| `--vrowser-tab-smoke-test` | Check the status bar shows the URL, open a second tab with `t`, switch with `gt`/`gT` (both wrap), close one with `x`, then (macOS) run an unknown command, cancel one with Escape, and `:open` a URL, and close the last tab with `x`, which quits the app. Needs `--use-alloy-style`. |
+| `--vrowser-tab-smoke-test` | Check the status bar shows the URL, open a second tab with `t`, switch with `gt`/`gT` (both wrap), close one with `x`, then (macOS) run an unknown command, cancel one with Escape, check `:open javascript:alert(1)` is rejected, `o` + `example.org` loads `https://example.org`, and close the last tab with `x`, which quits the app. Needs `--use-alloy-style`. |
 
 ## Layout
 

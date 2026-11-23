@@ -30,6 +30,9 @@ bool AddDefaultBindings(KeyBindings& bindings) {
   for (const Entry& entry : kDefaults) {
     ok = bindings.Bind(Mode::kNormal, entry.sequence, entry.command) && ok;
   }
+  // The command line opened with a command already typed.
+  ok = bindings.Bind(Mode::kNormal, "o", "command-line", {"open"}) && ok;
+  ok = bindings.Bind(Mode::kNormal, "O", "command-line", {"tabopen"}) && ok;
   return ok;
 }
 
