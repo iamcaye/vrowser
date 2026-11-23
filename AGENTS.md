@@ -67,7 +67,7 @@ them. Add code when an issue implements the behavior.
 | `src/commands` | Command registry and parser | `src/core` |
 | `src/ui` | Tabs, status, hints, command line | browser interface, vim |
 | `src/storage` | SQLite migrations, history, bookmarks, sessions | `src/core` |
-| `src/config` | User keymaps and settings files | `src/core`, commands |
+| `src/config` | User keymaps and settings files (`vrowserrc`) | `src/core`, commands, vim |
 | `apps/desktop` | `main`, macOS helpers, plist, Windows manifest | browser/cef |
 
 ## Dependency boundaries

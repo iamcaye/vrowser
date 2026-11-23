@@ -21,13 +21,15 @@ add_executable(vrowser_unit_tests
   unit/navigation_test.cpp
   unit/scroll_test.cpp
   unit/tab_list_test.cpp
-  unit/url_input_test.cpp)
+  unit/url_input_test.cpp
+  unit/user_config_test.cpp)
 target_link_libraries(vrowser_unit_tests PRIVATE
   vrowser_core
   vrowser_commands
   vrowser_vim
   vrowser_ui
   vrowser_storage
+  vrowser_config
   vrowser_sqlite
   GTest::gtest_main)
 target_compile_features(vrowser_unit_tests PRIVATE cxx_std_20)

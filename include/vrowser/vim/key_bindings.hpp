@@ -4,6 +4,7 @@
 #pragma once
 
 #include <map>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -68,6 +69,15 @@ class KeyBindings {
             std::string_view sequence,
             std::string command,
             std::vector<std::string> args = {});
+
+  // Removes the binding for exactly `sequence` in `mode`. Returns false when
+  // there is none.
+  bool Unbind(Mode mode, std::string_view sequence);
+
+  // The action bound to exactly `sequence` in `mode`, if any.
+  [[nodiscard]] std::optional<BindingAction> Find(
+      Mode mode,
+      std::string_view sequence) const;
 
   // Appends `key` to `state` and looks the sequence up in `mode`. In Normal
   // mode, leading digits form a count: 1-9 start one, and 0 extends a count

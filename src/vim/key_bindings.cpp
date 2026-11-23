@@ -177,6 +177,28 @@ bool KeyBindings::Bind(Mode mode,
   return true;
 }
 
+bool KeyBindings::Unbind(Mode mode, std::string_view sequence) {
+  const auto table = tables_.find(mode);
+  if (table == tables_.end()) {
+    return false;
+  }
+  return table->second.erase(ParseKeySequence(sequence)) > 0;
+}
+
+std::optional<BindingAction> KeyBindings::Find(
+    Mode mode,
+    std::string_view sequence) const {
+  const auto table = tables_.find(mode);
+  if (table == tables_.end()) {
+    return std::nullopt;
+  }
+  const auto it = table->second.find(ParseKeySequence(sequence));
+  if (it == table->second.end()) {
+    return std::nullopt;
+  }
+  return it->second;
+}
+
 KeyResolution KeyBindings::Resolve(Mode mode,
                                    KeySequenceState& state,
                                    std::string key) const {
