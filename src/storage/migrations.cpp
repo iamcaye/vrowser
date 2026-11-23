@@ -86,7 +86,17 @@ Database Database::Open(const std::filesystem::path& path, std::string* error) {
     }
     return result;
   }
-  const std::string resolved = (parent / path.filename()).string();
+  const std::filesystem::path file = parent / path.filename();
+  // NOFOLLOW is only enforced by SQLite's Unix VFS, so check here as well.
+  if (std::filesystem::is_symlink(file, ec)) {
+    if (error != nullptr) {
+      *error = "Refusing to open a symlinked database: " + path.string();
+    }
+    return result;
+  }
+  // SQLite takes UTF-8 file names on every platform.
+  const std::u8string utf8 = file.u8string();
+  const std::string resolved(utf8.begin(), utf8.end());
   sqlite3* raw = nullptr;
   const int flags =
       SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_NOFOLLOW;
