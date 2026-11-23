@@ -60,6 +60,11 @@ the SQLite migration runner and browsing history. Plugins are not started.
   frame: an input or content-editable region in a child frame (also
   out-of-process) selects Insert, and focus moving to a non-editable element
   in another frame returns to Normal.
+- Profiles: `--profile=<name>` selects a profile in the user-data directory
+  (`Default`, or `Profile-<name>`). The first window opens in a
+  `CefRequestContext` for that directory, every tab uses it, and
+  `vrowser.db` is stored there. History recorded before this change, in
+  `<user-data-dir>/vrowser.db`, is not moved.
 - C++20 library `vrowser_config`: `vrowserrc` in the profile directory is
   read at startup and applied to the Normal-mode bindings (`map`, `unmap`,
   comments). `command <name> <step> | <step>` defines a command that runs
@@ -132,6 +137,7 @@ Clang 21.0.0, Ninja 1.13.2.
 | CEF Windows workflow (`cef-windows.yml` on `windows-latest`) | Built `vrowser.exe` (bootstrap) and `vrowser.dll`; sandbox left ON |
 | User config, `--vrowser-smoke-test --use-mock-keychain` with a profile `vrowserrc` | invalid file: `vrowser: config: vrowserrc:2: Unknown command: no-such-command`, page still loads, exit 0; valid file: no error, exit 0 |
 | `--vrowser-key-smoke-test` with `map j scroll-up` / `map k scroll-down` | stops at "j scrolls one line step" (remapped `j` does not scroll down); the same run without a config passes, `keys ok` |
+| Profiles, local server, `--vrowser-smoke-test` launches on one `--user-data-dir` (macOS, Chrome style) | profile `a` loaded `/set` (`Set-Cookie`, Max-Age 3600); the next launch of `a` sent `vrowser_test=from-a`, launches of `b` and `default` sent no cookie, and `a` sent it again after them. `Cookies` and `vrowser.db` exist separately in `Default`, `Profile-a`, and `Profile-b`; `--profile=../x` exits 1 |
 | History, two `--vrowser-smoke-test` launches on one profile (`example.com`, then `iana.org/help/example-domains`) | `vrowser.db` at schema 1 holds both rows with titles `Example Domain` and `Example Domains`; the first row survived the restart |
 | `--vrowser-key-smoke-test` with `command top-reload scroll-to-top \| reload` and `map Q top-reload` | config loads without error, `keys ok`; `command bad scroll-to-top \| nope` logs `vrowserrc:1: Unknown command: nope` |
 | `tools/check_mac_bundle.sh` against debug `Vrowser.app` | passed |

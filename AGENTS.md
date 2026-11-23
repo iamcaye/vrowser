@@ -140,6 +140,8 @@ Switches:
 - `--url=<url>` initial page. Default `https://example.com`.
 - `--user-data-dir=<path>` CEF root cache. Default is the platform user-data
   directory documented in `docs/architecture/process-model.md`.
+- `--profile=<name>` profile in that directory (`default` when omitted). Each
+  profile has its own cookies, cache, and `vrowser.db`.
 - `--use-alloy-style` Alloy window instead of the default Chrome style.
 - `--use-native` platform window instead of Views.
 - `--vrowser-smoke-test` quit after the main frame load.

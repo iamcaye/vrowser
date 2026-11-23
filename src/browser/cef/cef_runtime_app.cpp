@@ -5,12 +5,16 @@
 
 #include <cstdio>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <system_error>
 
 #include "browser/cef/cef_browser_client.hpp"
 #include "browser/cef/views_delegates.hpp"
+#include "vrowser/core/profile.hpp"
 #include "include/cef_browser.h"
+#include "include/cef_request_context.h"
+#include "include/cef_request_context_handler.h"
 #include "include/views/cef_browser_view.h"
 #include "include/views/cef_window.h"
 #include "include/wrapper/cef_helpers.h"
@@ -42,27 +46,92 @@ bool ConfigureCefSettings(CefSettings& settings, const StartupConfig& config) {
                  error.message().c_str());
     return false;
   }
-  std::filesystem::create_directories(root, error);
+  const std::optional<std::filesystem::path> profile =
+      ProfileDirectory(root, config.profile);
+  if (!profile) {
+    std::fprintf(stderr,
+                 "vrowser: invalid --profile \"%s\": use 1-64 of a-z, 0-9, "
+                 "_ and -\n",
+                 config.profile.c_str());
+    return false;
+  }
+  std::filesystem::create_directories(*profile, error);
   if (error) {
     std::fprintf(stderr, "vrowser: cannot create %s: %s\n",
-                 PathToUtf8(root).c_str(), error.message().c_str());
+                 PathToUtf8(*profile).c_str(), error.message().c_str());
     return false;
   }
 
-  const std::string root_utf8 = PathToUtf8(root);
-  CefString(&settings.root_cache_path).FromString(root_utf8);
-  CefString(&settings.cache_path).FromString(root_utf8);
+  // The root is the process singleton key: one process per root, whatever
+  // the profile. The global context uses the selected profile, so nothing is
+  // written to a profile that was not chosen.
+  CefString(&settings.root_cache_path).FromString(PathToUtf8(root));
+  CefString(&settings.cache_path).FromString(PathToUtf8(*profile));
   CefString(&settings.log_file).FromString(PathToUtf8(root / "vrowser.log"));
   settings.log_severity = LOGSEVERITY_WARNING;
   return true;
 }
+
+namespace {
+
+// Opens the first window once the profile's request context is ready.
+class ProfileContextHandler : public CefRequestContextHandler {
+ public:
+  explicit ProfileContextHandler(CefRefPtr<CefRuntimeApp> app) : app_(app) {}
+
+  void OnRequestContextInitialized(
+      CefRefPtr<CefRequestContext> request_context) override {
+    CEF_REQUIRE_UI_THREAD();
+    // CEF keeps the handler until the context is gone; drop the app now.
+    if (CefRefPtr<CefRuntimeApp> app = std::move(app_)) {
+      app->OpenFirstWindow(request_context);
+    }
+  }
+
+ private:
+  CefRefPtr<CefRuntimeApp> app_;
+
+  IMPLEMENT_REFCOUNTING(ProfileContextHandler);
+};
+
+}  // namespace
 
 CefRuntimeApp::CefRuntimeApp(StartupConfig config)
     : config_(std::move(config)), client_(new CefBrowserClient(config_)) {}
 
 void CefRuntimeApp::OnContextInitialized() {
   CEF_REQUIRE_UI_THREAD();
+  // One request context per profile directory. Every tab of this window
+  // uses it, so cookies and storage stay in the profile's directory. It
+  // initializes asynchronously; the window opens once it is ready.
+  std::error_code error;
+  const std::optional<std::filesystem::path> profile = ProfileDirectory(
+      std::filesystem::absolute(config_.user_data_dir, error), config_.profile);
+  if (!profile || error) {
+    // ConfigureCefSettings validated the profile; this is not expected.
+    std::fprintf(stderr, "vrowser: cannot resolve the profile directory\n");
+    CefQuitMessageLoop();
+    return;
+  }
+  CefRequestContextSettings context_settings;
+  CefString(&context_settings.cache_path).FromString(PathToUtf8(*profile));
+  CefRefPtr<CefRequestContext> context = CefRequestContext::CreateContext(
+      context_settings, new ProfileContextHandler(this));
+  // The handler may already have run; then the client holds the context.
+  if (!first_window_opened_) {
+    request_context_ = context;
+  }
+}
 
+void CefRuntimeApp::OpenFirstWindow(
+    CefRefPtr<CefRequestContext> request_context) {
+  CEF_REQUIRE_UI_THREAD();
+  // The client keeps the context for new tabs and releases it on the last
+  // close; the app holds no reference past this point.
+  first_window_opened_ = true;
+  request_context_ = nullptr;
+  std::fprintf(stderr, "vrowser: profile %s\n", config_.profile.c_str());
+  client_->SetRequestContext(request_context);
   const cef_runtime_style_t runtime_style =
       config_.alloy_style ? CEF_RUNTIME_STYLE_ALLOY : CEF_RUNTIME_STYLE_DEFAULT;
   CefBrowserSettings browser_settings;
@@ -73,8 +142,8 @@ void CefRuntimeApp::OnContextInitialized() {
 
   if (config_.use_views) {
     CefRefPtr<CefBrowserView> browser_view = CefBrowserView::CreateBrowserView(
-        client_, config_.initial_url, browser_settings, nullptr, nullptr,
-        CreateBrowserViewDelegate(runtime_style));
+        client_, config_.initial_url, browser_settings, nullptr,
+        request_context, CreateBrowserViewDelegate(runtime_style));
     CefWindow::CreateTopLevelWindow(
         // Alloy has no toolbar, so the main window gets a status bar with the
         // URL. Chrome style keeps Chromium's toolbar.
@@ -88,7 +157,7 @@ void CefRuntimeApp::OnContextInitialized() {
 #endif
   window_info.runtime_style = runtime_style;
   CefBrowserHost::CreateBrowser(window_info, client_, config_.initial_url,
-                                browser_settings, nullptr, nullptr);
+                                browser_settings, nullptr, request_context);
 }
 
 CefRefPtr<CefClient> CefRuntimeApp::GetDefaultClient() {

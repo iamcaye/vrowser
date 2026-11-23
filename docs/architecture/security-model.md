@@ -41,9 +41,13 @@ cache are not shared with another CEF application. A second process that points
 at the same directory does not open a second writer. CEF forwards the launch
 to the running instance.
 
-Cookies, cache, and local storage live under that directory. A future profile
-feature will use separate `CefRequestContext` directories under the same root.
-Profiles must not be allowed to read each other's cookie files.
+Cookies, cache, and local storage live in the selected profile's directory,
+which is a child of that root (`Default`, or `Profile-<name>` for
+`--profile=<name>`). Each profile gets its own `CefRequestContext` with that
+directory as its cache path, and every tab is created in it, so a cookie set
+in one profile is not sent from another. Profile names are restricted to
+`a`-`z`, `0`-`9`, `_`, and `-`, so a name cannot leave the root or alias
+another profile on a case-insensitive disk.
 
 ## Web platform
 

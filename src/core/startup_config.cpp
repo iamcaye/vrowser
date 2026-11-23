@@ -100,6 +100,11 @@ StartupConfig ParseStartupConfig(const std::vector<std::string>& args) {
       config.initial_url = *url;
     }
   }
+  if (const std::optional<std::string> profile = SwitchValue(args, "profile")) {
+    if (!profile->empty()) {
+      config.profile = *profile;
+    }
+  }
   if (const std::optional<std::string> dir =
           SwitchValue(args, "user-data-dir")) {
     if (!dir->empty()) {
