@@ -97,5 +97,23 @@ TEST(FormatStatusLineTest, NarrowWidthStillShowsTheHost) {
             "NORMAL  https://example.com...  loading");
 }
 
+TEST(FormatStatusLineTest, MessageFollowsTheUrl) {
+  StatusLineInput input;
+  input.url = "https://example.com/";
+  input.message = "Unknown command: nope";
+  EXPECT_EQ(FormatStatusLine(input, 80),
+            "NORMAL  https://example.com/  | Unknown command: nope");
+}
+
+TEST(FormatStatusLineTest, MessageNeverHidesTheHost) {
+  StatusLineInput input;
+  input.url = "https://example.com/a/long/path";
+  input.message = "Unknown command: a-very-long-command-name";
+  const std::string line = FormatStatusLine(input, 20);
+  EXPECT_NE(line.find("https://example.com"), std::string::npos);
+  EXPECT_NE(line.find("| Unknown command: a-very-long-command-name"),
+            std::string::npos);
+}
+
 }  // namespace
 }  // namespace vrowser

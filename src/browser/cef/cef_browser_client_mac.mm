@@ -65,8 +65,10 @@ void CefBrowserClient::PlatformSendTestKey(CefRefPtr<CefBrowser> browser,
     return;
   }
   const unichar unit = key.character;
-  const unichar unshifted =
-      key.shift && unit >= 'A' && unit <= 'Z' ? unit - 'A' + 'a' : unit;
+  const unichar unshifted = key.unshifted != 0 ? key.unshifted
+                            : key.shift && unit >= 'A' && unit <= 'Z'
+                                ? unit - 'A' + 'a'
+                                : unit;
   NSString* characters = [NSString stringWithCharacters:&unit length:1];
   NSString* ignoring = [NSString stringWithCharacters:&unshifted length:1];
   const NSEventModifierFlags flags = key.shift ? NSEventModifierFlagShift : 0;

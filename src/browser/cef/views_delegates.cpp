@@ -10,9 +10,49 @@
 #include "include/views/cef_fill_layout.h"
 #include "include/views/cef_panel.h"
 #include "include/views/cef_textfield.h"
+#include "include/views/cef_textfield_delegate.h"
 
 namespace vrowser {
 namespace {
+
+// The command line: Enter submits, Escape or losing focus cancels. Other keys
+// edit the text as usual.
+class CommandLineDelegate : public CefTextfieldDelegate {
+ public:
+  bool OnKeyEvent(CefRefPtr<CefTextfield> textfield,
+                  const CefKeyEvent& event) override {
+    if (event.type != KEYEVENT_RAWKEYDOWN && event.type != KEYEVENT_KEYDOWN) {
+      return false;
+    }
+    constexpr uint32_t kShortcutModifiers =
+        EVENTFLAG_CONTROL_DOWN | EVENTFLAG_ALT_DOWN | EVENTFLAG_COMMAND_DOWN;
+    CefBrowserClient* client = CefBrowserClient::GetInstance();
+    if (client == nullptr || (event.modifiers & kShortcutModifiers) != 0) {
+      return false;
+    }
+    constexpr int kVkReturn = 0x0D;
+    constexpr int kVkEscape = 0x1B;
+    if (event.windows_key_code == kVkReturn) {
+      client->SubmitCommandLine(textfield->GetText().ToString());
+      return true;
+    }
+    if (event.windows_key_code == kVkEscape) {
+      client->CloseCommandLine();
+      return true;
+    }
+    return false;
+  }
+
+  void OnBlur(CefRefPtr<CefView> view) override {
+    (void)view;
+    if (CefBrowserClient* client = CefBrowserClient::GetInstance()) {
+      client->CloseCommandLine();
+    }
+  }
+
+ private:
+  IMPLEMENT_REFCOUNTING(CommandLineDelegate);
+};
 
 class WindowDelegate : public CefWindowDelegate {
  public:
@@ -62,6 +102,14 @@ class WindowDelegate : public CefWindowDelegate {
     window->AddChildView(tabs);
     layout->SetFlexForView(tabs, 1);
 
+    // Hidden until `:`. Sits between the page and the status bar.
+    CefRefPtr<CefTextfield> command_line =
+        CefTextfield::CreateTextfield(new CommandLineDelegate());
+    command_line->SetFontList("Menlo, Consolas, DejaVu Sans Mono, 12px");
+    command_line->SetVisible(false);
+    window->AddChildView(command_line);
+    layout->SetFlexForView(command_line, 0);
+
     // Read-only and not focusable: keys stay with the page and the shell.
     CefRefPtr<CefTextfield> bar = CefTextfield::CreateTextfield(nullptr);
     bar->SetReadOnly(true);
@@ -71,6 +119,7 @@ class WindowDelegate : public CefWindowDelegate {
     layout->SetFlexForView(bar, 0);
     if (CefBrowserClient* client = CefBrowserClient::GetInstance()) {
       client->AttachStatusBar(bar);
+      client->AttachCommandLine(command_line);
     }
   }
 

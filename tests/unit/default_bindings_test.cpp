@@ -40,6 +40,7 @@ TEST_F(DefaultBindingsTest, EachKeyRunsItsCommand) {
     std::vector<std::string> keys;
     const char* command;
   } kCases[] = {
+      {{":"}, "command-line"},
       {{"r"}, "reload"},
       {{"j"}, "scroll-down"},
       {{"k"}, "scroll-up"},

@@ -20,6 +20,38 @@ constexpr int kVkUp = 0x26;
 constexpr int kVkRight = 0x27;
 constexpr int kVkDown = 0x28;
 
+// Windows OEM virtual keys, named by the character they type on a US layout
+// without Shift. The typed character (`:` for Shift+`;`) still drives the
+// binding notation; this only gives the key an identity so it is not dropped.
+std::string_view OemKeyName(int code) {
+  switch (code) {
+    case 0xBA:
+      return ";";
+    case 0xBB:
+      return "=";
+    case 0xBC:
+      return ",";
+    case 0xBD:
+      return "-";
+    case 0xBE:
+      return ".";
+    case 0xBF:
+      return "/";
+    case 0xC0:
+      return "`";
+    case 0xDB:
+      return "[";
+    case 0xDC:
+      return "\\";
+    case 0xDD:
+      return "]";
+    case 0xDE:
+      return "'";
+    default:
+      return std::string_view();
+  }
+}
+
 std::optional<std::string> KeyIdentity(int code) {
   if (code >= 'A' && code <= 'Z') {
     return std::string(1, static_cast<char>(code - 'A' + 'a'));
@@ -56,8 +88,13 @@ std::optional<std::string> KeyIdentity(int code) {
     case kVkDown:
       name = "ArrowDown";
       break;
-    default:
-      return std::nullopt;
+    default: {
+      const std::string_view oem = OemKeyName(code);
+      if (oem.empty()) {
+        return std::nullopt;
+      }
+      return std::string(oem);
+    }
   }
   return std::string(name);
 }

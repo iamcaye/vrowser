@@ -33,6 +33,9 @@ struct TestKey {
   int linux_key_code;
   char16_t character;
   bool shift = false;
+  // The character without Shift, when Shift changes more than letter case
+  // (`;` for `:`). 0 means the lowercase of `character`.
+  char16_t unshifted = 0;
 };
 
 // What a smoke test does with a key: a full press, or one part of a hold.
@@ -124,6 +127,14 @@ class CefBrowserClient : public CefClient,
   void OnNativeKeyUp(int native_key_code);
   // The main window's status bar (Alloy style). UI thread.
   void AttachStatusBar(CefRefPtr<CefTextfield> status_bar);
+  // The main window's command line (Alloy style), hidden until `:`. UI thread.
+  void AttachCommandLine(CefRefPtr<CefTextfield> command_line);
+  // Hides the command line and runs `text` through the command registry. An
+  // error is shown in the status bar. UI thread.
+  void SubmitCommandLine(const std::string& text);
+  // Hides the command line without running it and returns the tab to Normal.
+  // Safe to call when it is already closed. UI thread.
+  void CloseCommandLine();
   int exit_code() const { return exit_code_; }
 
  private:
@@ -153,6 +164,11 @@ class CefBrowserClient : public CefClient,
   void TabSmokeActivated(TabId id);
   // Tab smoke: logs the status bar and checks it shows the browser's URL.
   bool TabSmokeStatusBarShows(CefRefPtr<CefBrowser> browser);
+  // Tab smoke, macOS: drives the command line step by step. See the
+  // definition.
+  void CommandSmokeStep(int step);
+  // Tab smoke: closes the last tab with `x` and expects the process to quit.
+  void TabSmokeCloseLast();
   void TabSmokeClosed(TabId id);
   // Types `keys` into `browser`, in order, from UI tasks.
   void SendTestKeys(CefRefPtr<CefBrowser> browser,
@@ -165,6 +181,9 @@ class CefBrowserClient : public CefClient,
   // Moves `steps` tabs right (positive) or left (negative) from the active
   // tab, wrapping, and shows and focuses the new tab.
   void SwitchTab(int steps);
+  // `:`: puts the tab in Command mode and shows and focuses the command line.
+  void OpenCommandLine();
+  bool CommandLineOpen() const { return command_line_open_; }
   // Sets the window title from the active tab's current page.
   void ShowActiveTitle();
   // Redraws the status bar for the active tab: committed main-frame URL,
@@ -236,6 +255,12 @@ class CefBrowserClient : public CefClient,
   std::optional<HeldScroll> held_scroll_;
   // UI thread only.
   CefRefPtr<CefTextfield> status_bar_;
+  CefRefPtr<CefTextfield> command_line_;
+  bool command_line_open_ = false;
+  // The tab whose `:` opened the command line.
+  TabId command_tab_ = 0;
+  // Shown in the status bar until the next key press.
+  std::string status_message_;
   std::set<TabId> loading_tabs_;
 
   IMPLEMENT_REFCOUNTING(CefBrowserClient);

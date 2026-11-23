@@ -11,6 +11,7 @@ bool AddDefaultBindings(KeyBindings& bindings) {
     const char* command;
   };
   static constexpr Entry kDefaults[] = {
+      {":", "command-line"},
       {"r", "reload"},
       {"j", "scroll-down"},
       {"k", "scroll-up"},

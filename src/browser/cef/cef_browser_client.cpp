@@ -76,6 +76,8 @@ constexpr TestKey kTestShiftT{'T', 17, 28, u'T', true};
 constexpr TestKey kTestX{'X', 7, 53, u'x'};
 constexpr TestKey kTest3{'3', 20, 12, u'3'};
 constexpr TestKey kTestShiftH{'H', 4, 43, u'H', true};
+constexpr TestKey kTestColon{0xBA, 41, 47, u':', true, u';'};
+constexpr TestKey kTestEnter{0x0D, 36, 36, 0x0D};
 constexpr TestKey kTestShiftL{'L', 37, 46, u'L', true};
 
 struct ScrollCommand {
@@ -196,6 +198,23 @@ void CefBrowserClient::RegisterCommands() {
         }
         return CommandResult::Ok();
       });
+  commands_.Register("command-line", "Open the command line",
+                     [this](const std::vector<std::string>&) {
+                       OpenCommandLine();
+                       return CommandResult::Ok();
+                     });
+  commands_.Register("open", "Load a URL in the current tab",
+                     [this](const std::vector<std::string>& args) {
+                       if (args.size() != 1) {
+                         return CommandResult::Error("Usage: open <url>");
+                       }
+                       // NavigationController rejects empty and javascript:
+                       // URLs.
+                       if (!navigation_.Request(args[0])) {
+                         return CommandResult::Error("Cannot open: " + args[0]);
+                       }
+                       return CommandResult::Ok();
+                     });
   CHECK(AddDefaultBindings(bindings_));
 }
 
@@ -225,6 +244,87 @@ void CefBrowserClient::SwitchTab(int steps) {
   TabSmokeActivated(*after);
 }
 
+void CefBrowserClient::AttachCommandLine(CefRefPtr<CefTextfield> command_line) {
+  CEF_REQUIRE_UI_THREAD();
+  command_line_ = command_line;
+}
+
+void CefBrowserClient::OpenCommandLine() {
+  CEF_REQUIRE_UI_THREAD();
+  CefRefPtr<CefBrowser> browser = CommandBrowser();
+  if (!command_line_ || !command_line_->IsValid()) {
+    std::fprintf(stderr, "vrowser: the command line needs --use-alloy-style\n");
+    return;
+  }
+  if (!browser || command_line_open_) {
+    return;
+  }
+  command_tab_ = browser->GetIdentifier();
+  KeyInputState& input = key_inputs_[command_tab_];
+  input.mode.Apply(ModeEvent::kEnterCommand);
+  input.sequence = KeySequenceState{};
+  command_line_open_ = true;
+  // CefTextfield::SetText rejects an empty string; select and delete instead.
+  if (!command_line_->GetText().empty()) {
+    command_line_->SelectAll(false);
+    command_line_->ExecuteCommand(CEF_TFC_DELETE);
+  }
+  command_line_->SetVisible(true);
+  if (CefRefPtr<CefWindow> window = command_line_->GetWindow()) {
+    window->Layout();
+  }
+  // Focus in a task: the `:` key event is still being delivered to the page's
+  // view, and its character must not land in the command line.
+  CefPostTask(TID_UI, base::BindOnce(
+                          [](CefRefPtr<CefTextfield> line) {
+                            if (line->IsValid() && line->IsVisible()) {
+                              line->RequestFocus();
+                            }
+                          },
+                          command_line_));
+  std::fprintf(stderr, "vrowser: mode command\n");
+  UpdateStatusBar();
+}
+
+void CefBrowserClient::CloseCommandLine() {
+  CEF_REQUIRE_UI_THREAD();
+  if (!command_line_open_) {
+    return;
+  }
+  // Cleared first: focusing the page blurs the line, which calls this again.
+  command_line_open_ = false;
+  if (command_line_ && command_line_->IsValid()) {
+    command_line_->SetVisible(false);
+    if (CefRefPtr<CefWindow> window = command_line_->GetWindow()) {
+      window->Layout();
+    }
+  }
+  const auto it = key_inputs_.find(command_tab_);
+  if (it != key_inputs_.end() && it->second.mode.mode() == Mode::kCommand) {
+    it->second.mode.Apply(ModeEvent::kEscape);
+  }
+  if (CefRefPtr<CefBrowser> browser = FindBrowser(command_tab_)) {
+    browser->GetHost()->SetFocus(true);
+  }
+  std::fprintf(stderr, "vrowser: mode normal\n");
+  UpdateStatusBar();
+}
+
+void CefBrowserClient::SubmitCommandLine(const std::string& text) {
+  CEF_REQUIRE_UI_THREAD();
+  CloseCommandLine();
+  const ParsedCommand parsed = ParseCommandLine(text);
+  if (parsed.name.empty()) {
+    return;
+  }
+  const CommandResult result = commands_.Execute(text);
+  std::fprintf(
+      stderr, "vrowser: command-line %s%s%s\n", parsed.name.c_str(),
+      result.ok() ? "" : " failed: ", std::string(result.error()).c_str());
+  status_message_ = result.ok() ? std::string() : std::string(result.error());
+  UpdateStatusBar();
+}
+
 void CefBrowserClient::AttachStatusBar(CefRefPtr<CefTextfield> status_bar) {
   CEF_REQUIRE_UI_THREAD();
   status_bar_ = status_bar;
@@ -249,6 +349,7 @@ void CefBrowserClient::UpdateStatusBar() {
       input.pending = it->second.sequence;
     }
   }
+  input.message = status_message_;
   // About 7 px per character of the 12 px monospace font.
   const int width = status_bar_->GetBounds().width;
   const size_t max_chars = width > 0 ? static_cast<size_t>(width) / 7 : 160;
@@ -439,6 +540,9 @@ bool CefBrowserClient::OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
   if (!key) {
     return false;
   }
+  if (key->key_down && !key->repeat && !key->character_only) {
+    status_message_.clear();
+  }
   KeyInputState& input = key_inputs_[browser->GetIdentifier()];
   const Mode before = input.mode.mode();
   const KeyDispatch dispatch = DispatchKey(bindings_, input, *key);
@@ -583,6 +687,7 @@ void CefBrowserClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
     // The window is gone. CEF requires every reference to be released before
     // CefShutdown.
     status_bar_ = nullptr;
+    command_line_ = nullptr;
     CefQuitMessageLoop();
   }
 }
@@ -835,8 +940,11 @@ void CefBrowserClient::ShowActiveTab() {
 //   1  wait for the second tab's load, then type `gt` in it.
 //   2  `gt` wrapped to the first tab; type `gT`.
 //   3  `gT` wrapped to the second tab; type `x`.
-//   4  `x` closed the second tab; check the first is shown, type `x` again.
-//   5  `x` closed the last tab; the process quits with 0.
+//   4  `x` closed the second tab; check the first is shown.
+//   5  macOS: the command line steps (CommandSmokeStep) end with
+//      `:open https://example.org/`. Elsewhere go straight to 7.
+//   6  example.org loaded from `:open`; check the status bar.
+//   7  `x` closed the last tab; the process quits with 0.
 void CefBrowserClient::TabSmokeLoadEnd(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
   const TabId id = browser->GetIdentifier();
@@ -848,6 +956,16 @@ void CefBrowserClient::TabSmokeLoadEnd(CefRefPtr<CefBrowser> browser) {
       return;
     }
     SendTestKeys(browser, {kTestT});
+    return;
+  }
+  if (tab_smoke_stage_ == 6 &&
+      browser->GetMainFrame()->GetURL().ToString().find("example.org") !=
+          std::string::npos) {
+    if (!TabSmokeStatusBarShows(browser)) {
+      FinishSmoke(1);
+      return;
+    }
+    TabSmokeCloseLast();
     return;
   }
   if (tab_smoke_stage_ == 1 && id != tab_smoke_first_) {
@@ -901,7 +1019,7 @@ void CefBrowserClient::TabSmokeClosed(TabId id) {
   if (!tab_smoke_test_ || smoke_finished_) {
     return;
   }
-  if (tab_smoke_stage_ == 5 && id == tab_smoke_first_) {
+  if (tab_smoke_stage_ == 7 && id == tab_smoke_first_) {
     std::fprintf(stderr, "vrowser-smoke: x closed the last tab, quitting\n");
     return;
   }
@@ -921,11 +1039,91 @@ void CefBrowserClient::TabSmokeClosed(TabId id) {
     FinishSmoke(1);
     return;
   }
+#if defined(OS_MAC)
+  // Synthesized keys reach the Views command line only on macOS, where they
+  // are native events sent to the window.
+  // Wait for focus to return to the remaining tab after the closed view is
+  // removed.
+  tab_smoke_stage_ = 5;
+  SendTestKeys(remaining, {kTestColon}, 300);
+  CefPostDelayedTask(
+      TID_UI, base::BindOnce(&CefBrowserClient::CommandSmokeStep, this, 0),
+      700);
+#else
+  TabSmokeCloseLast();
+#endif
+}
+
+void CefBrowserClient::TabSmokeCloseLast() {
   // Closing the last tab must quit on its own. The 45 s smoke timeout still
   // applies and exits 2 if it does not.
-  tab_smoke_stage_ = 5;
+  tab_smoke_stage_ = 7;
   exit_code_ = 0;
-  SendTestKeys(remaining, {kTestX});
+  if (CefRefPtr<CefBrowser> browser = ActiveBrowser()) {
+    SendTestKeys(browser, {kTestX});
+  }
+}
+
+// Each step checks the state the previous keys should have left, then types
+// the next keys and schedules the next step:
+//   0  `:` opened the line in Command mode; submit `nope`.
+//   1  the line closed and the bar reports the unknown command; type `:`.
+//   2  the line is open; type `nope2` and Escape.
+//   3  the line closed and nothing ran; type `:`.
+//   4  the line is open; submit `open https://example.org/` (stage 6).
+void CefBrowserClient::CommandSmokeStep(int step) {
+  CEF_REQUIRE_UI_THREAD();
+  if (smoke_finished_) {
+    return;
+  }
+  CefRefPtr<CefBrowser> browser = ActiveBrowser();
+  const std::string bar = StatusBarText();
+  const bool normal = bar.starts_with("NORMAL  ");
+  bool ok = false;
+  const char* text = nullptr;
+  TestKey key = kTestEnter;
+  switch (step) {
+    case 0:
+      ok = CommandLineOpen() && bar.starts_with("COMMAND  ");
+      text = "nope";
+      break;
+    case 1:
+      ok = !CommandLineOpen() && normal &&
+           bar.find("| Unknown command: nope") != std::string::npos;
+      key = kTestColon;
+      break;
+    case 2:
+      ok = CommandLineOpen();
+      text = "nope2";
+      key = kTestEscape;
+      break;
+    case 3:
+      ok = !CommandLineOpen() && normal &&
+           bar.find("nope2") == std::string::npos;
+      key = kTestColon;
+      break;
+    case 4:
+      ok = CommandLineOpen();
+      text = "open https://example.org/";
+      break;
+  }
+  std::fprintf(stderr, "vrowser-smoke: command step %d %s: \"%s\"\n", step,
+               ok ? "ok" : "failed", bar.c_str());
+  if (!ok || !browser) {
+    FinishSmoke(1);
+    return;
+  }
+  if (text != nullptr) {
+    command_line_->SetText(text);
+  }
+  SendTestKeys(browser, {key});
+  if (step == 4) {
+    tab_smoke_stage_ = 6;
+    return;
+  }
+  CefPostDelayedTask(
+      TID_UI,
+      base::BindOnce(&CefBrowserClient::CommandSmokeStep, this, step + 1), 400);
 }
 
 void CefBrowserClient::SendTestKeys(CefRefPtr<CefBrowser> browser,
@@ -982,7 +1180,11 @@ void CefBrowserClient::SendTestKey(CefRefPtr<CefBrowser> browser,
                                    TestKey key,
                                    TestKeyPhase phase) {
   CefRefPtr<CefBrowserHost> host = browser->GetHost();
-  host->SetFocus(true);
+  // Keys for the open command line must reach it; focusing the page would
+  // blur and close it.
+  if (!CommandLineOpen()) {
+    host->SetFocus(true);
+  }
 #if defined(OS_MAC)
   // CefBrowserHost::SendKeyEvent trips a Chromium DCHECK for windowed
   // browsers on macOS, so send a native event instead.
@@ -1003,7 +1205,8 @@ void CefBrowserClient::SendTestKey(CefRefPtr<CefBrowser> browser,
                     (phase == TestKeyPhase::kRepeat ? EVENTFLAG_IS_REPEAT : 0);
   event.character = key.character;
   event.unmodified_character =
-      key.shift && key.character >= u'A' && key.character <= u'Z'
+      key.unshifted != 0 ? key.unshifted
+      : key.shift && key.character >= u'A' && key.character <= u'Z'
           ? static_cast<char16_t>(key.character - u'A' + u'a')
           : key.character;
   if (phase != TestKeyPhase::kUp) {

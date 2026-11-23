@@ -141,5 +141,27 @@ TEST(NormalizeKeyTest, UnknownKeyCodesAreDropped) {
   EXPECT_FALSE(NormalizeKey(WinRawKeyDown(0xFF)).has_value());
 }
 
+TEST(NormalizeKeyTest, PunctuationKeysHaveAnIdentity) {
+  // Shift+; on a US layout types ':'. It used to be dropped because the OEM
+  // virtual key had no name.
+  const auto colon = NormalizeKey(MacKeyDown(0xBA, U':', kRawModifierShift));
+  ASSERT_TRUE(colon.has_value());
+  EXPECT_EQ(colon->key, ";");
+  EXPECT_EQ(colon->character, U':');
+  EXPECT_TRUE(colon->modifiers.shift);
+
+  const struct {
+    int code;
+    const char* name;
+  } kKeys[] = {{0xBA, ";"},  {0xBB, "="}, {0xBC, ","}, {0xBD, "-"},
+               {0xBE, "."},  {0xBF, "/"}, {0xC0, "`"}, {0xDB, "["},
+               {0xDC, "\\"}, {0xDD, "]"}, {0xDE, "'"}};
+  for (const auto& k : kKeys) {
+    const auto event = NormalizeKey(WinRawKeyDown(k.code));
+    ASSERT_TRUE(event.has_value()) << k.name;
+    EXPECT_EQ(event->key, k.name);
+  }
+}
+
 }  // namespace
 }  // namespace vrowser

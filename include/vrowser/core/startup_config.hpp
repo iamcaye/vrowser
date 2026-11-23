@@ -22,8 +22,9 @@ struct StartupConfig {
   // Load the initial URL, print one result line, and quit.
   bool smoke_test{false};
   // Like smoke_test, but checks the status bar shows the URL, opens a second
-  // tab with `t`, switches tabs with
-  // `gt` and `gT`, and closes both with `x`, so closing the last tab quits.
+  // tab with `t`, switches tabs with `gt` and `gT`, closes one with `x`,
+  // exercises the command line on macOS (unknown command, Escape, `:open`),
+  // and closes the last tab with `x`, so the process quits.
   // Implies smoke_test.
   bool tab_smoke_test{false};
   // Like smoke_test, but loads a built-in test page, sends keys, checks that
