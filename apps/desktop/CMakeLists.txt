@@ -10,6 +10,8 @@ set(VROWSER_SHARED_SOURCES
   "${CMAKE_SOURCE_DIR}/src/core/startup_config.cpp"
   "${CMAKE_SOURCE_DIR}/src/core/tab_list.cpp"
   "${CMAKE_SOURCE_DIR}/src/core/url_input.cpp"
+  "${CMAKE_SOURCE_DIR}/src/storage/history.cpp"
+  "${CMAKE_SOURCE_DIR}/src/storage/migrations.cpp"
   "${CMAKE_SOURCE_DIR}/src/browser/cef/cef_runtime_app.cpp"
   "${CMAKE_SOURCE_DIR}/src/browser/cef/cef_browser_client.cpp"
   "${CMAKE_SOURCE_DIR}/src/browser/cef/views_delegates.cpp"
@@ -57,7 +59,7 @@ if(OS_LINUX)
   add_executable(${CEF_TARGET} ${VROWSER_SOURCES})
   SET_EXECUTABLE_TARGET_PROPERTIES(${CEF_TARGET})
   add_dependencies(${CEF_TARGET} libcef_dll_wrapper)
-  target_link_libraries(${CEF_TARGET} libcef_lib libcef_dll_wrapper ${CEF_STANDARD_LIBS})
+  target_link_libraries(${CEF_TARGET} vrowser_sqlite libcef_lib libcef_dll_wrapper ${CEF_STANDARD_LIBS})
   set_target_properties(${CEF_TARGET} PROPERTIES
     INSTALL_RPATH "$ORIGIN"
     BUILD_WITH_INSTALL_RPATH TRUE
@@ -78,7 +80,7 @@ if(OS_MAC)
   add_executable(${CEF_TARGET} MACOSX_BUNDLE ${VROWSER_SOURCES})
   SET_EXECUTABLE_TARGET_PROPERTIES(${CEF_TARGET})
   add_dependencies(${CEF_TARGET} libcef_dll_wrapper)
-  target_link_libraries(${CEF_TARGET} libcef_dll_wrapper ${CEF_STANDARD_LIBS})
+  target_link_libraries(${CEF_TARGET} vrowser_sqlite libcef_dll_wrapper ${CEF_STANDARD_LIBS})
   set_target_properties(${CEF_TARGET} PROPERTIES
     OUTPUT_NAME "${VROWSER_MAC_NAME}"
     MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/mac/Info.plist.in")
@@ -139,7 +141,7 @@ if(OS_WINDOWS)
   endif()
 
   add_dependencies(${CEF_TARGET} libcef_dll_wrapper)
-  target_link_libraries(${CEF_TARGET} libcef_lib libcef_dll_wrapper ${CEF_STANDARD_LIBS})
+  target_link_libraries(${CEF_TARGET} vrowser_sqlite libcef_lib libcef_dll_wrapper ${CEF_STANDARD_LIBS})
   COPY_FILES("${CEF_TARGET}" "${CEF_BINARY_FILES}" "${CEF_BINARY_DIR}" "${CEF_TARGET_OUT_DIR}")
   COPY_FILES("${CEF_TARGET}" "${CEF_RESOURCE_FILES}" "${CEF_RESOURCE_DIR}" "${CEF_TARGET_OUT_DIR}")
   if(USE_SANDBOX)

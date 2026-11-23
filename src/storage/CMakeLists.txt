@@ -26,7 +26,7 @@ if(UNIX AND NOT APPLE)
   target_link_libraries(vrowser_sqlite PUBLIC m)
 endif()
 
-add_library(vrowser_storage STATIC migrations.cpp)
+add_library(vrowser_storage STATIC history.cpp migrations.cpp)
 target_include_directories(vrowser_storage PUBLIC
   "${PROJECT_SOURCE_DIR}/include")
 target_link_libraries(vrowser_storage PRIVATE vrowser_sqlite)

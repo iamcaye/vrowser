@@ -3,6 +3,7 @@
 
 #include "browser/cef/cef_browser_client.hpp"
 
+#include <chrono>
 #include <cstdio>
 #include <iterator>
 #include <optional>
@@ -162,6 +163,7 @@ CefBrowserClient::CefBrowserClient(const StartupConfig& config)
   navigation_.SetListener(
       [this](const std::string& url) { LoadInMainFrame(url); });
   RegisterCommands();
+  OpenHistory(config.user_data_dir);
   // A bad config keeps the defaults; the error shows in the status bar.
   const ConfigResult user_config = LoadUserConfig(
       config.user_data_dir / kUserConfigFileName, commands_, bindings_);
@@ -270,6 +272,21 @@ void CefBrowserClient::RegisterCommands() {
         return result;
       });
   CHECK(AddDefaultBindings(bindings_));
+}
+
+void CefBrowserClient::OpenHistory(const std::filesystem::path& profile_dir) {
+  std::string error;
+  HistoryStore store = HistoryStore::Open(
+      profile_dir / std::string(kProfileDatabaseFileName), &error);
+  if (!store.is_open()) {
+    // Browsing works without history; say why it is off.
+    std::fprintf(stderr, "vrowser: history off: %s\n", error.c_str());
+    if (status_message_.empty()) {
+      status_message_ = "History is off: " + error;
+    }
+    return;
+  }
+  history_.emplace(std::move(store));
 }
 
 void CefBrowserClient::SwitchTab(int steps) {
@@ -650,6 +667,9 @@ void CefBrowserClient::OnTitleChange(CefRefPtr<CefBrowser> browser,
     KeySmokeStep(browser, "title " + title.ToString());
   }
   const TabId id = browser->GetIdentifier();
+  if (history_) {
+    history_->OnTitle(id, title.ToString());
+  }
   if (tabs_.Contains(id) && tabs_.active() != id) {
     // A background tab does not own the window title.
     return;
@@ -747,6 +767,9 @@ void CefBrowserClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
   }
   const TabId id = browser->GetIdentifier();
   key_inputs_.erase(id);
+  if (history_) {
+    history_->OnTabClosed(id);
+  }
   if (held_scroll_ && held_scroll_->tab == id) {
     held_scroll_.reset();
   }
@@ -779,6 +802,13 @@ void CefBrowserClient::OnLoadStart(
     }
     std::fprintf(stderr, "vrowser: load-start %s\n",
                  frame->GetURL().ToString().c_str());
+  }
+  // OnLoadStart runs after the navigation commits.
+  if (history_) {
+    const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch());
+    history_->OnCommit(browser->GetIdentifier(), frame->IsMain(),
+                       frame->GetURL().ToString(), now.count());
   }
 }
 

@@ -8,6 +8,7 @@
 #include <initializer_list>
 #include <list>
 #include <map>
+#include <filesystem>
 #include <optional>
 #include <set>
 #include <string>
@@ -21,6 +22,7 @@
 #include "vrowser/core/startup_config.hpp"
 #include "vrowser/commands/command_registry.hpp"
 #include "vrowser/core/tab_list.hpp"
+#include "vrowser/storage/history.hpp"
 #include "vrowser/vim/key_bindings.hpp"
 #include "vrowser/vim/key_dispatcher.hpp"
 
@@ -175,6 +177,8 @@ class CefBrowserClient : public CefClient,
                     std::initializer_list<TestKey> keys,
                     int64_t delay_ms = 0);
   void RegisterCommands();
+  // Opens the profile database for history. Failure leaves history off.
+  void OpenHistory(const std::filesystem::path& profile_dir);
   // Scrolls the focused frame of CommandBrowser(), or its main frame when no
   // frame has focus.
   void ScrollFocusedFrame(ScrollMotion motion, int count);
@@ -262,6 +266,8 @@ class CefBrowserClient : public CefClient,
   TabId command_tab_ = 0;
   // Shown in the status bar until the next key press.
   std::string status_message_;
+  // Visits in the profile database. Empty when it could not be opened.
+  std::optional<HistoryRecorder> history_;
   std::set<TabId> loading_tabs_;
 
   IMPLEMENT_REFCOUNTING(CefBrowserClient);
