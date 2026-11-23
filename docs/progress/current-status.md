@@ -13,7 +13,9 @@ started.
 - CMake presets `ci`, `debug`, and `release`. `ci` builds unit tests without
   downloading CEF.
 - C++20 library `vrowser_core` with startup-switch parsing and a
-  `NavigationController` the CEF client loads from on the UI thread.
+  `NavigationController` the CEF client loads from on the UI thread, and
+  `ClassifyUrlInput`, which turns command-line text into a URL, a search, or
+  a rejection.
 - C++20 library `vrowser_commands` with a command registry and a
   whitespace command-line parser. No CEF headers.
 - C++20 library `vrowser_vim` with the mode state machine (Normal, Insert,
@@ -23,7 +25,8 @@ started.
   headers.
 - GoogleTest tests for startup switches, the command registry, mode
   transitions, key normalization, key bindings, counts, navigation
-  requests, the tab list, and key dispatch.
+  requests, command-line URL classification, the tab list, and key
+  dispatch.
 - A second launch with `--url` loads that URL in the running window.
 - Core `TabList` and tabs in the main window (Alloy style only): each tab is a
   browser view under a fill layout, only the active one is visible, closing a
@@ -38,8 +41,10 @@ started.
   bar yet.
 - Command line in the Alloy main window: `:` opens it in Command mode, Enter
   runs the line through the command registry, Escape or losing focus cancels.
-  Errors show in the status bar. `:open <url>` loads a URL in the current
-  tab.
+  Errors show in the status bar. `:open <text>` loads in the current tab and
+  `:tabopen <text>` in a new tab; `o` and `O` open the line with that command
+  typed. Text that is not a URL or a host becomes a DuckDuckGo search, and
+  `javascript:`, `data:`, `file:`, and browser-internal schemes are rejected.
 - Normal and Insert modes in the window: Normal-mode bindings are consumed
   before the page sees them, a focused text field switches the tab to Insert,
   and Escape returns to Normal. Bindings: `r` reloads, `j`/`k` scroll a line
@@ -84,7 +89,7 @@ Clang 21.0.0, Ninja 1.13.2.
 | CEF macOS arm64 archive SHA256 | `22a510e5d348a907953278b618e1e9e442ccf78773b9fee0e09eaf154eef53b0` |
 | Smoke test, sandbox left on | `https://example.com` main frame HTTP 200, process exit 0 |
 | Relaunch with `--url=https://www.iana.org/help/example-domains` into a running app | `vrowser: load-end 200 https://www.iana.org/help/example-domains` in the first process |
-| `just tab-smoke` (`--vrowser-tab-smoke-test --use-alloy-style`) | status bar showed `NORMAL  https://example.com/  loading` on both tabs; `t` opened the second tab; `gt` wrapped to tab 1, `gT` wrapped to tab 2; `x` closed tab 2 (`vrowser-smoke: tabs ok, 1 open, remaining visible`); macOS command line: `:nope` reported `Unknown command: nope`, `:` + Escape ran nothing, `:open https://example.org/` loaded it and the bar showed it; `x` on the last tab quit, exit 0 (11 runs) |
+| `just tab-smoke` (`--vrowser-tab-smoke-test --use-alloy-style`) | status bar showed `NORMAL  https://example.com/  loading` on both tabs; `t` opened the second tab; `gt` wrapped to tab 1, `gT` wrapped to tab 2; `x` closed tab 2 (`vrowser-smoke: tabs ok, 1 open, remaining visible`); macOS command line: `:nope` reported `Unknown command: nope`, `:` + Escape ran nothing, `:open javascript:alert(1)` reported `Cannot open javascript: URLs`, `o` opened the line with `open `, and `example.org` typed after it loaded `https://example.org/`; `x` on the last tab quit, exit 0 (3 runs) |
 | `--vrowser-tab-smoke-test` in Chrome style | `vrowser: tabs need --use-alloy-style`, exit 1 (second Chrome-style browser view is never created) |
 | `just key-smoke` (`--vrowser-key-smoke-test`, Chrome style) | unbound `q` reached the page, `r` ran `reload` and did not, focused field selected Insert, Escape returned to Normal and did not reach the page; `j` 60, `3j` 240, `k` 180, `G` bottom, `gg` 0, `d` half a viewport, `u` 0, no motion key reached the page; `jjj` typed quickly ended at 180 like `3j`, held `j` kept scrolling and stopped on key-up, held `j` with no key-up stopped on its own, `H` went back from a second page, `H` at the start did nothing, `L` went forward; `vrowser-smoke: keys ok`, exit 0 (three runs) |
 | `--vrowser-key-smoke-test --use-alloy-style` | not supported: synthesized keys never reach Alloy pages, even without a keyboard handler; exits 1 with a message |
@@ -167,4 +172,5 @@ Alloy's client-owned prompt path.
 
 ## Recommended next task
 
-[Open a URL or search from the command line](https://github.com/iamcaye/vrowser/issues/64).
+[Follow focus across editable elements and frames](https://github.com/iamcaye/vrowser/issues/23)
+(the only open `priority:p0`).
