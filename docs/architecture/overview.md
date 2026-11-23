@@ -67,4 +67,5 @@ same executable is re-entered through `CefExecuteProcess`.
 
 Plugins, user script injection, and Chrome extension APIs are M4 work. They
 need a sandbox story of their own. The foundation does not reserve a plugin
-loader.
+loader. The proposed plugin API and its trust boundary are in
+[RFC 0002](../rfcs/0002-plugins.md); no runtime exists.
