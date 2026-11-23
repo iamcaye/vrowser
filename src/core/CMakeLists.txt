@@ -1,4 +1,5 @@
 add_library(vrowser_core STATIC
+  download_path.cpp
   navigation.cpp
   scroll.cpp
   startup_config.cpp

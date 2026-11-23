@@ -78,6 +78,13 @@ the SQLite migration runner and browsing history. Plugins are not started.
   pages, and internal pages are skipped. If the database cannot be opened,
   browsing continues and the status bar says history is off. Writes run on
   the UI thread; each is one small insert. No history UI yet.
+- Downloads: every download is saved into `<profile>/Downloads` with no
+  dialog. The suggested name is untrusted: `SanitizeDownloadName` keeps only
+  the last path component, replaces control and reserved characters, never
+  yields `.` or `..`, and `UniqueDownloadPath` adds ` (1)`, ` (2)`, ... to a
+  taken name. An update whose path is outside the directory is canceled. The
+  status bar shows `Downloading`, `Downloaded`, or `Download failed`. No
+  download list yet.
 - clang-format (C++ and Objective-C), clang-tidy config, editorconfig.
 - GitHub Actions workflow that runs the unit tests on Linux, macOS, and
   Windows. Run [44557827020](https://github.com/iamcaye/vrowser/actions/runs/44557827020)
@@ -132,6 +139,7 @@ Clang 21.0.0, Ninja 1.13.2.
 | CEF Windows workflow (`cef-windows.yml` on `windows-latest`) | Built `vrowser.exe` (bootstrap) and `vrowser.dll`; sandbox left ON |
 | User config, `--vrowser-smoke-test --use-mock-keychain` with a profile `vrowserrc` | invalid file: `vrowser: config: vrowserrc:2: Unknown command: no-such-command`, page still loads, exit 0; valid file: no error, exit 0 |
 | `--vrowser-key-smoke-test` with `map j scroll-up` / `map k scroll-down` | stops at "j scrolls one line step" (remapped `j` does not scroll down); the same run without a config passes, `keys ok` |
+| Downloads, local server sending `Content-Disposition: attachment; filename="../../evil.txt"` (macOS, Chrome style and `--use-alloy-style`) | saved as `<profile>/Downloads/_.._evil.txt` without a dialog, `vrowser: download complete`; nothing written outside `Downloads` |
 | History, two `--vrowser-smoke-test` launches on one profile (`example.com`, then `iana.org/help/example-domains`) | `vrowser.db` at schema 1 holds both rows with titles `Example Domain` and `Example Domains`; the first row survived the restart |
 | `--vrowser-key-smoke-test` with `command top-reload scroll-to-top \| reload` and `map Q top-reload` | config loads without error, `keys ok`; `command bad scroll-to-top \| nope` logs `vrowserrc:1: Unknown command: nope` |
 | `tools/check_mac_bundle.sh` against debug `Vrowser.app` | passed |
