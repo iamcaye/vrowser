@@ -25,6 +25,7 @@ bool AddDefaultBindings(KeyBindings& bindings) {
       {"gT", "tab-previous"},
       {"t", "tab-new"},
       {"x", "tab-close"},
+      {"f", "hint-follow"},
   };
   bool ok = true;
   for (const Entry& entry : kDefaults) {

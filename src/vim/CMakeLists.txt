@@ -1,6 +1,7 @@
 add_library(vrowser_vim STATIC
   default_bindings.cpp
   frame_focus.cpp
+  hints.cpp
   key_bindings.cpp
   key_dispatcher.cpp
   key_event.cpp

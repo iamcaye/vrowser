@@ -24,6 +24,7 @@
 #include "vrowser/core/tab_list.hpp"
 #include "vrowser/storage/history.hpp"
 #include "vrowser/vim/key_bindings.hpp"
+#include "vrowser/vim/hints.hpp"
 #include "vrowser/vim/key_dispatcher.hpp"
 
 namespace vrowser {
@@ -177,6 +178,22 @@ class CefBrowserClient : public CefClient,
                     std::initializer_list<TestKey> keys,
                     int64_t delay_ms = 0);
   void RegisterCommands();
+  // Link hints (`f`): asks the focused frame of `browser` for hintable
+  // elements and enters Hint mode until a label is typed or Escape.
+  void StartHints(CefRefPtr<CefBrowser> browser);
+  // The frame's renderer answered a collect with element boxes.
+  void OnHintRects(CefRefPtr<CefBrowser> browser,
+                   CefRefPtr<CefFrame> frame,
+                   CefRefPtr<CefListValue> args);
+  // A key typed in Hint mode.
+  void HandleHintKey(CefRefPtr<CefBrowser> browser, const std::string& key);
+  // Ends the tab's hint run. Leaves Hint mode, and asks the frame to remove
+  // its labels when `clear` is set.
+  void EndHints(CefRefPtr<CefBrowser> browser, bool clear);
+  // Sends a hint message with the run's request ID first.
+  void SendHintMessage(CefRefPtr<CefBrowser> browser,
+                       const char* name,
+                       CefRefPtr<CefListValue> extra);
   // Opens the profile database for history. Failure leaves history off.
   void OpenHistory(const std::filesystem::path& profile_dir);
   // Scrolls the focused frame of CommandBrowser(), or its main frame when no
@@ -269,6 +286,16 @@ class CefBrowserClient : public CefClient,
   // Visits in the profile database. Empty when it could not be opened.
   std::optional<HistoryRecorder> history_;
   std::set<TabId> loading_tabs_;
+  // One hint run per tab, from `f` until a label is chosen or Hint ends.
+  struct HintRun {
+    int request = 0;
+    // The hinted frame's identifier, from the browser process.
+    std::string frame;
+    // Set once the labels are on screen.
+    std::optional<HintSession> session;
+  };
+  std::map<TabId, HintRun> hint_runs_;
+  int next_hint_request_ = 0;
 
   IMPLEMENT_REFCOUNTING(CefBrowserClient);
 };

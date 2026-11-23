@@ -273,7 +273,7 @@ TEST_F(KeyDispatcherTest, NavigationLeavesInsert) {
   EXPECT_FALSE(state_.mode.editable_focused());
 }
 
-TEST_F(KeyDispatcherTest, CommandAndHintOnlyHandleEscape) {
+TEST_F(KeyDispatcherTest, CommandOnlyHandlesEscapeAndHintEndsOnEscape) {
   state_.mode.Apply(ModeEvent::kEnterCommand);
   EXPECT_EQ(Send(Down("r", U'r')).disposition, KeyDisposition::kForward);
   EXPECT_EQ(Send(Down("Escape")).disposition, KeyDisposition::kConsume);
@@ -282,6 +282,36 @@ TEST_F(KeyDispatcherTest, CommandAndHintOnlyHandleEscape) {
   state_.mode.Apply(ModeEvent::kEnterHint);
   EXPECT_EQ(Send(Down("Escape")).disposition, KeyDisposition::kConsume);
   EXPECT_EQ(state_.mode.mode(), Mode::kNormal);
+}
+
+TEST_F(KeyDispatcherTest, HintConsumesKeysAndReportsThem) {
+  state_.mode.Apply(ModeEvent::kEnterHint);
+
+  const KeyDispatch letter = Send(Down("a", U'a'));
+  EXPECT_EQ(letter.disposition, KeyDisposition::kConsume);
+  EXPECT_EQ(letter.hint_key, "a");
+  EXPECT_FALSE(letter.action.has_value());
+  EXPECT_EQ(Send(CharOnly(U'a')).disposition, KeyDisposition::kConsume);
+  EXPECT_EQ(Send(Up("a")).disposition, KeyDisposition::kConsume);
+
+  // A bound Normal key is a label key here, not its binding.
+  const KeyDispatch bound = Send(Down("r", U'r'));
+  EXPECT_EQ(bound.hint_key, "r");
+  EXPECT_FALSE(bound.action.has_value());
+  EXPECT_EQ(Send(Down("Backspace")).hint_key, "Backspace");
+  EXPECT_EQ(Send(Down("a", U'A', Modifiers{.shift = true})).hint_key, "a");
+  EXPECT_EQ(state_.mode.mode(), Mode::kHint);
+}
+
+TEST_F(KeyDispatcherTest, HintForwardsShortcuts) {
+  state_.mode.Apply(ModeEvent::kEnterHint);
+
+  const KeyDispatch shortcut = Send(Down("q", 0, Modifiers{.meta = true}));
+
+  EXPECT_EQ(shortcut.disposition, KeyDisposition::kForward);
+  EXPECT_FALSE(shortcut.hint_key.has_value());
+  EXPECT_EQ(Send(Down("c", 0, Modifiers{.control = true})).disposition,
+            KeyDisposition::kForward);
 }
 
 TEST_F(KeyDispatcherTest, HeldKeysFollowATabSwitch) {

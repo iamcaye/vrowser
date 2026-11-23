@@ -83,6 +83,8 @@ constexpr TestKey kTestColon{0xBA, 41, 47, u':', true, u';'};
 constexpr TestKey kTestEnter{0x0D, 36, 36, 0x0D};
 constexpr TestKey kTestShiftL{'L', 37, 46, u'L', true};
 constexpr TestKey kTestO{'O', 31, 32, u'o'};
+constexpr TestKey kTestF{'F', 3, 41, u'f'};
+constexpr TestKey kTestS{'S', 1, 39, u's'};
 
 struct ScrollCommand {
   const char* name;
@@ -241,6 +243,17 @@ void CefBrowserClient::RegisterCommands() {
         }
         return CommandResult::Ok();
       });
+  // Counted so that `3f` hints once.
+  commands_.RegisterCounted(
+      "hint-follow",
+      "Label the visible links and controls; typing a "
+      "label clicks or focuses it",
+      [this](const std::vector<std::string>&, int) {
+        if (CefRefPtr<CefBrowser> browser = CommandBrowser()) {
+          StartHints(browser);
+        }
+        return CommandResult::Ok();
+      });
   // Arguments are typed into the line first: `o` runs `command-line open`.
   commands_.Register("command-line", "Open the command line",
                      [this](const std::vector<std::string>& args) {
@@ -287,6 +300,147 @@ void CefBrowserClient::OpenHistory(const std::filesystem::path& profile_dir) {
     return;
   }
   history_.emplace(std::move(store));
+}
+
+void CefBrowserClient::StartHints(CefRefPtr<CefBrowser> browser) {
+  CEF_REQUIRE_UI_THREAD();
+  const TabId id = browser->GetIdentifier();
+  if (hint_runs_.count(id) > 0) {
+    EndHints(browser, /*clear=*/true);
+  }
+  CefRefPtr<CefFrame> frame = browser->GetFocusedFrame();
+  if (!frame || !frame->IsValid()) {
+    frame = browser->GetMainFrame();
+  }
+  if (!frame) {
+    return;
+  }
+  StopHeldScroll();
+  KeyInputState& input = key_inputs_[id];
+  input.mode.Apply(ModeEvent::kEnterHint);
+  input.sequence = KeySequenceState{};
+  hint_runs_[id] = HintRun{.request = ++next_hint_request_,
+                           .frame = frame->GetIdentifier().ToString(),
+                           .session = std::nullopt};
+  std::fprintf(stderr, "vrowser: mode hint\n");
+  SendHintMessage(browser, kHintCollectMessage, nullptr);
+  UpdateStatusBar();
+}
+
+void CefBrowserClient::OnHintRects(CefRefPtr<CefBrowser> browser,
+                                   CefRefPtr<CefFrame> frame,
+                                   CefRefPtr<CefListValue> args) {
+  CEF_REQUIRE_UI_THREAD();
+  const auto it = hint_runs_.find(browser->GetIdentifier());
+  // Only an answer to the current request, from the frame it was sent to.
+  if (it == hint_runs_.end() || it->second.session || args->GetSize() != 2 ||
+      args->GetType(0) != VTYPE_INT || args->GetInt(0) != it->second.request ||
+      args->GetType(1) != VTYPE_LIST ||
+      frame->GetIdentifier().ToString() != it->second.frame) {
+    return;
+  }
+  CefRefPtr<CefListValue> numbers = args->GetList(1);
+  std::vector<HintRect> rects;
+  for (size_t i = 0; i + 3 < numbers->GetSize(); i += 4) {
+    if (numbers->GetType(i) != VTYPE_DOUBLE ||
+        numbers->GetType(i + 1) != VTYPE_DOUBLE ||
+        numbers->GetType(i + 2) != VTYPE_DOUBLE ||
+        numbers->GetType(i + 3) != VTYPE_DOUBLE) {
+      break;
+    }
+    rects.push_back({.x = numbers->GetDouble(i),
+                     .y = numbers->GetDouble(i + 1),
+                     .width = numbers->GetDouble(i + 2),
+                     .height = numbers->GetDouble(i + 3)});
+  }
+  std::fprintf(stderr, "vrowser: hints %zu\n", rects.size());
+  if (rects.empty()) {
+    EndHints(browser, /*clear=*/true);
+    status_message_ = "No links to hint";
+    UpdateStatusBar();
+    if (key_smoke_test_) {
+      KeySmokeStep(browser, "hints 0");
+    }
+    return;
+  }
+  std::vector<std::string> labels = AssignHintLabels(rects);
+  CefRefPtr<CefListValue> list = CefListValue::Create();
+  for (size_t i = 0; i < labels.size(); ++i) {
+    list->SetString(i, labels[i]);
+  }
+  it->second.session.emplace(std::move(labels));
+  SendHintMessage(browser, kHintShowMessage, list);
+  if (key_smoke_test_) {
+    KeySmokeStep(browser, "hints " + std::to_string(rects.size()));
+  }
+}
+
+void CefBrowserClient::HandleHintKey(CefRefPtr<CefBrowser> browser,
+                                     const std::string& key) {
+  CEF_REQUIRE_UI_THREAD();
+  const auto it = hint_runs_.find(browser->GetIdentifier());
+  // Keys typed before the labels arrive are dropped.
+  if (it == hint_runs_.end() || !it->second.session) {
+    return;
+  }
+  const HintStep step = it->second.session->Type(key);
+  switch (step.status) {
+    case HintStatus::kPending: {
+      CefRefPtr<CefListValue> typed = CefListValue::Create();
+      typed->SetString(0, it->second.session->typed());
+      SendHintMessage(browser, kHintFilterMessage, typed);
+      return;
+    }
+    case HintStatus::kMatched: {
+      CefRefPtr<CefListValue> index = CefListValue::Create();
+      index->SetInt(0, static_cast<int>(*step.index));
+      std::fprintf(stderr, "vrowser: hint %s\n",
+                   it->second.session->typed().c_str());
+      SendHintMessage(browser, kHintActivateMessage, index);
+      // Activation removes the labels in the renderer.
+      EndHints(browser, /*clear=*/false);
+      return;
+    }
+    case HintStatus::kNoMatch:
+      return;
+  }
+}
+
+void CefBrowserClient::EndHints(CefRefPtr<CefBrowser> browser, bool clear) {
+  CEF_REQUIRE_UI_THREAD();
+  const TabId id = browser->GetIdentifier();
+  if (clear) {
+    SendHintMessage(browser, kHintClearMessage, nullptr);
+  }
+  hint_runs_.erase(id);
+  KeyInputState& input = key_inputs_[id];
+  if (input.mode.mode() == Mode::kHint) {
+    input.mode.Apply(ModeEvent::kEscape);
+    std::fprintf(stderr, "vrowser: mode normal\n");
+  }
+  UpdateStatusBar();
+}
+
+void CefBrowserClient::SendHintMessage(CefRefPtr<CefBrowser> browser,
+                                       const char* name,
+                                       CefRefPtr<CefListValue> extra) {
+  const auto it = hint_runs_.find(browser->GetIdentifier());
+  if (it == hint_runs_.end()) {
+    return;
+  }
+  CefRefPtr<CefFrame> frame = browser->GetFrameByIdentifier(it->second.frame);
+  if (!frame || !frame->IsValid()) {
+    return;
+  }
+  CefRefPtr<CefProcessMessage> message = CefProcessMessage::Create(name);
+  CefRefPtr<CefListValue> args = message->GetArgumentList();
+  args->SetInt(0, it->second.request);
+  if (extra) {
+    for (size_t i = 0; i < extra->GetSize(); ++i) {
+      args->SetValue(i + 1, extra->GetValue(i));
+    }
+  }
+  frame->SendProcessMessage(PID_RENDERER, message);
 }
 
 void CefBrowserClient::SwitchTab(int steps) {
@@ -580,10 +734,18 @@ bool CefBrowserClient::OnProcessMessageReceived(
     CefProcessId source_process,
     CefRefPtr<CefProcessMessage> message) {
   CEF_REQUIRE_UI_THREAD();
-  // Renderer messages are untrusted. Accept only the one message the
-  // renderer app sends, with the expected argument type.
-  if (source_process != PID_RENDERER ||
-      message->GetName() != kEditableFocusMessage) {
+  // Renderer messages are untrusted. Accept only the messages the renderer
+  // app sends, with the expected argument types.
+  if (source_process != PID_RENDERER) {
+    return false;
+  }
+  if (message->GetName() == kHintRectsMessage) {
+    if (frame) {
+      OnHintRects(browser, frame, message->GetArgumentList());
+    }
+    return true;
+  }
+  if (message->GetName() != kEditableFocusMessage) {
     return false;
   }
   CefRefPtr<CefListValue> args = message->GetArgumentList();
@@ -635,6 +797,13 @@ bool CefBrowserClient::OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
     SyncFrameFocus(input, FocusedFrameId(browser));
   }
   const KeyDispatch dispatch = DispatchKey(bindings_, input, *key);
+  if (before == Mode::kHint && input.mode.mode() != Mode::kHint) {
+    // Escape: the labels go with the mode.
+    EndHints(browser, /*clear=*/true);
+  }
+  if (dispatch.hint_key) {
+    HandleHintKey(browser, *dispatch.hint_key);
+  }
   if (input.mode.mode() != before) {
     std::fprintf(stderr, "vrowser: mode %s\n",
                  input.mode.mode() == Mode::kInsert ? "insert" : "normal");
@@ -767,6 +936,7 @@ void CefBrowserClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
   }
   const TabId id = browser->GetIdentifier();
   key_inputs_.erase(id);
+  hint_runs_.erase(id);
   if (history_) {
     history_->OnTabClosed(id);
   }
@@ -797,6 +967,10 @@ void CefBrowserClient::OnLoadStart(
     // The load can drop a key-up. Forget consumed presses so the next key-up
     // of that key is not swallowed.
     NoteNavigation(key_inputs_[browser->GetIdentifier()]);
+    // The hinted document is gone, and its labels with it.
+    if (hint_runs_.count(browser->GetIdentifier()) > 0) {
+      EndHints(browser, /*clear=*/false);
+    }
     if (held_scroll_ && held_scroll_->tab == browser->GetIdentifier()) {
       StopHeldScroll();
     }
@@ -1279,10 +1453,12 @@ namespace vrowser {
 std::string CefBrowserClient::KeySmokePageUrl() {
   // Logs every keydown the page sees into the title, with the focused id, and
   // every scroll as "scroll:<y>", "scroll:half" (half a viewport down), or
-  // "scroll:bottom". Keys in the child frame are logged as "frame-<id>". The
-  // spacer makes the page taller than the window.
+  // "scroll:bottom", and a click on the button as "clicked:b". Keys in the
+  // child frame are logged as "frame-<id>". The spacer makes the page taller
+  // than the window.
   return DataUri(
-      "<!doctype html><title>ready</title><input id=f><button id=b>b</button>"
+      "<!doctype html><title>ready</title><input id=f>"
+      "<button id=b onclick=\"document.title = 'clicked:b'\">b</button>"
       "<div id=e contenteditable>edit</div>"
       "<iframe id=i srcdoc=\"<input id=g>\" height=40></iframe>"
       "<div style=\"height:5000px\"></div>"
@@ -1470,7 +1646,16 @@ void CefBrowserClient::KeySmokeStep(CefRefPtr<CefBrowser> browser,
       {"title key:r:frame-g", "focus a button in the main frame", {}, 0},
       {"mode normal", "Normal again; focus the contenteditable region", {}, 0},
       {"mode insert", "contenteditable is Insert; blur it", {}, 0},
-      {"mode normal", "done", {}, 0},
+      {"mode normal",
+       "Normal again; f labels the field, button, and region",
+       {kTestF},
+       1},
+      {"hints 3", "Hint mode; check the labels are in the page", {}, 0},
+      {"title labels:shown", "s is the button's label", {kTestS}, 1},
+      {"title clicked:b", "the label clicked the button; f again", {kTestF}, 1},
+      {"hints 3", "Escape cancels Hint mode", {kTestEscape}, 1},
+      {"mode normal", "check the labels are gone", {}, 0},
+      {"title labels:none", "done", {}, 0},
   };
   constexpr int kStepCount = static_cast<int>(std::size(kSteps));
   if (key_smoke_step_ >= kStepCount ||
@@ -1493,6 +1678,15 @@ void CefBrowserClient::KeySmokeStep(CefRefPtr<CefBrowser> browser,
   }
   if (index == kFrameStep) {
     browser->GetMainFrame()->LoadURL(KeySmokePageUrl());
+    return;
+  }
+  // Link hints: whether the labels' host element is in the page.
+  constexpr int kHintStep = kFrameStep + 7;
+  if (index == kHintStep || index == kHintStep + 4) {
+    browser->GetMainFrame()->ExecuteJavaScript(
+        "document.title = 'labels:' + (document.querySelector('vrowser-hints') "
+        "? 'shown' : 'none')",
+        "", 0);
     return;
   }
   // Focus changes made by page script, as a click would make them.

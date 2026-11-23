@@ -19,6 +19,7 @@ set(VROWSER_SHARED_SOURCES
   "${CMAKE_SOURCE_DIR}/src/ui/status_line.cpp"
   "${CMAKE_SOURCE_DIR}/src/vim/default_bindings.cpp"
   "${CMAKE_SOURCE_DIR}/src/vim/frame_focus.cpp"
+  "${CMAKE_SOURCE_DIR}/src/vim/hints.cpp"
   "${CMAKE_SOURCE_DIR}/src/vim/key_bindings.cpp"
   "${CMAKE_SOURCE_DIR}/src/vim/key_dispatcher.cpp"
   "${CMAKE_SOURCE_DIR}/src/vim/key_event.cpp"
