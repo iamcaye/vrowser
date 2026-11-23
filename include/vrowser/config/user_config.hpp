@@ -22,24 +22,31 @@ struct ConfigResult {
   std::string error;
 };
 
-// Applies config text to Normal-mode `bindings`. One entry per line:
+// Applies config text to Normal-mode `bindings` and `commands`. One entry per
+// line:
 //
 //   map <keys> <command> [args...]   bind keys, replacing an existing binding
 //   unmap <keys>                     remove a binding
+//   command <name> <step> [| <step>...]
+//                                    a new command that runs each step, a
+//                                    command line, in order, stopping at the
+//                                    first error
 //   " comment, # comment, or a blank line
 //
-// Commands must be registered in `commands`. Either every line applies or
-// none does: on an error `bindings` is unchanged. `source` names the text in
-// error messages.
+// Commands named by `map` and by steps must be registered in `commands` or
+// defined by an earlier `command` line. Either every line applies or none
+// does: on an error `bindings` and `commands` are unchanged. New commands run
+// their steps through `commands`, which must outlive them. `source` names the
+// text in error messages.
 ConfigResult ApplyUserConfig(std::string_view text,
                              std::string_view source,
-                             const CommandRegistry& commands,
+                             CommandRegistry& commands,
                              KeyBindings& bindings);
 
 // Reads `path` and applies it with ApplyUserConfig. A missing file is not an
 // error and leaves `bindings` unchanged.
 ConfigResult LoadUserConfig(const std::filesystem::path& path,
-                            const CommandRegistry& commands,
+                            CommandRegistry& commands,
                             KeyBindings& bindings);
 
 }  // namespace vrowser

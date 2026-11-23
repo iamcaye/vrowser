@@ -62,7 +62,9 @@ the SQLite migration runner but no tables. Plugins are not started.
   in another frame returns to Normal.
 - C++20 library `vrowser_config`: `vrowserrc` in the profile directory is
   read at startup and applied to the Normal-mode bindings (`map`, `unmap`,
-  comments). Commands must exist in the registry; an invalid file changes
+  comments). `command <name> <step> | <step>` defines a command that runs
+  existing commands in order, and `map` can bind it. Commands must exist in
+  the registry or earlier in the file; an invalid file changes
   nothing and its error, with the line number, shows in the status bar.
   A missing file keeps the defaults.
 - C++20 library `vrowser_storage` with `Database` (an owned SQLite handle)
@@ -99,7 +101,7 @@ Clang 21.0.0, Ninja 1.13.2.
 
 | Check | Result |
 | --- | --- |
-| `cmake --preset ci && cmake --build --preset ci && ctest --preset ci` | 208 tests passed (includes 14 user-config tests) |
+| `cmake --preset ci && cmake --build --preset ci && ctest --preset ci` | 219 tests passed (includes 25 user-config tests) |
 | `ctest --test-dir build/debug` | 9 tests passed (older local debug tree) |
 | `cmake --preset debug && cmake --build --preset debug` | Built `Vrowser.app` and five helper bundles |
 | CEF macOS arm64 archive SHA256 | `22a510e5d348a907953278b618e1e9e442ccf78773b9fee0e09eaf154eef53b0` |
@@ -126,6 +128,7 @@ Clang 21.0.0, Ninja 1.13.2.
 | CEF Windows workflow (`cef-windows.yml` on `windows-latest`) | Built `vrowser.exe` (bootstrap) and `vrowser.dll`; sandbox left ON |
 | User config, `--vrowser-smoke-test --use-mock-keychain` with a profile `vrowserrc` | invalid file: `vrowser: config: vrowserrc:2: Unknown command: no-such-command`, page still loads, exit 0; valid file: no error, exit 0 |
 | `--vrowser-key-smoke-test` with `map j scroll-up` / `map k scroll-down` | stops at "j scrolls one line step" (remapped `j` does not scroll down); the same run without a config passes, `keys ok` |
+| `--vrowser-key-smoke-test` with `command top-reload scroll-to-top \| reload` and `map Q top-reload` | config loads without error, `keys ok`; `command bad scroll-to-top \| nope` logs `vrowserrc:1: Unknown command: nope` |
 | `tools/check_mac_bundle.sh` against debug `Vrowser.app` | passed |
 | `tools/check_mac_bundle.sh` against missing-helper fixture | failed as expected |
 
