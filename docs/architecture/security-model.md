@@ -56,8 +56,12 @@ reason Chrome style is the prototype default.
 Custom schemes, if they are added, are registered as standard schemes without
 the privileges of `https`, and they are not allowed to fetch `file:` URLs.
 
-Downloads and permission prompts are not implemented. Until they are, Chromium's
-Chrome-style UI is the only handler. Do not auto-accept permission requests.
+Downloads are saved by Vrowser's download handler into `<profile>/Downloads`,
+in both styles, with no dialog. The suggested file name is untrusted and is
+reduced to one sanitized entry in that directory (`SanitizeDownloadName`), so
+a page cannot choose a path. Permission prompts are not implemented. Until
+they are, Chromium's Chrome-style UI is the only handler. Do not auto-accept
+permission requests.
 
 ## Supply chain
 

@@ -14,6 +14,7 @@
 #include <string>
 
 #include "include/cef_client.h"
+#include "include/cef_download_handler.h"
 #include "include/views/cef_browser_view.h"
 #include "include/views/cef_textfield.h"
 #include "include/views/cef_window.h"
@@ -50,6 +51,7 @@ enum class TestKeyPhase {
 
 class CefBrowserClient : public CefClient,
                          public CefDisplayHandler,
+                         public CefDownloadHandler,
                          public CefKeyboardHandler,
                          public CefLifeSpanHandler,
                          public CefLoadHandler {
@@ -63,6 +65,7 @@ class CefBrowserClient : public CefClient,
   static CefBrowserClient* GetInstance();
 
   CefRefPtr<CefDisplayHandler> GetDisplayHandler() override { return this; }
+  CefRefPtr<CefDownloadHandler> GetDownloadHandler() override { return this; }
   CefRefPtr<CefKeyboardHandler> GetKeyboardHandler() override { return this; }
   CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
   CefRefPtr<CefLoadHandler> GetLoadHandler() override { return this; }
@@ -82,6 +85,16 @@ class CefBrowserClient : public CefClient,
 
   void OnTitleChange(CefRefPtr<CefBrowser> browser,
                      const CefString& title) override;
+
+  // Every download is saved into the profile's downloads directory under a
+  // sanitized name. The page never picks the directory, and no dialog asks.
+  bool OnBeforeDownload(CefRefPtr<CefBrowser> browser,
+                        CefRefPtr<CefDownloadItem> download_item,
+                        const CefString& suggested_name,
+                        CefRefPtr<CefBeforeDownloadCallback> callback) override;
+  void OnDownloadUpdated(CefRefPtr<CefBrowser> browser,
+                         CefRefPtr<CefDownloadItem> download_item,
+                         CefRefPtr<CefDownloadItemCallback> callback) override;
 
   // Normal-mode keys that match a binding are consumed here, before the page
   // sees them. Insert-mode keys go to the page, except Escape.
@@ -266,6 +279,11 @@ class CefBrowserClient : public CefClient,
   TabId command_tab_ = 0;
   // Shown in the status bar until the next key press.
   std::string status_message_;
+  // <profile>/Downloads, absolute.
+  std::filesystem::path downloads_dir_;
+  // Target paths of downloads in progress, by download ID, so two downloads
+  // with one name do not share a file.
+  std::map<uint32_t, std::filesystem::path> active_downloads_;
   // Visits in the profile database. Empty when it could not be opened.
   std::optional<HistoryRecorder> history_;
   std::set<TabId> loading_tabs_;

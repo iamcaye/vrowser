@@ -20,6 +20,7 @@
 #include "browser/cef/cef_renderer_app.hpp"
 #include "browser/cef/views_delegates.hpp"
 #include "vrowser/config/user_config.hpp"
+#include "vrowser/core/download_path.hpp"
 #include "vrowser/core/url_input.hpp"
 #include "vrowser/ui/status_line.hpp"
 #include "vrowser/vim/default_bindings.hpp"
@@ -132,6 +133,21 @@ CommandResult ResolveOpenArgs(const char* command,
   return CommandResult::Ok();
 }
 
+// Paths and CefString without the narrow code page std::filesystem uses on
+// Windows, which aborts on characters it cannot convert (no exceptions here).
+std::filesystem::path PathFromCef(const CefString& text) {
+#if defined(OS_WIN)
+  return std::filesystem::path(text.ToWString());
+#else
+  return std::filesystem::path(text.ToString());
+#endif
+}
+
+std::string PathToUtf8(const std::filesystem::path& path) {
+  const std::u8string utf8 = path.u8string();
+  return std::string(utf8.begin(), utf8.end());
+}
+
 // The frame that has keyboard focus according to the browser process, or an
 // empty string when there is none.
 std::string FocusedFrameId(CefRefPtr<CefBrowser> browser) {
@@ -162,6 +178,9 @@ CefBrowserClient::CefBrowserClient(const StartupConfig& config)
   // The controller is a member, so the listener cannot outlive `this`.
   navigation_.SetListener(
       [this](const std::string& url) { LoadInMainFrame(url); });
+  std::error_code ec;
+  downloads_dir_ = std::filesystem::absolute(config.user_data_dir, ec) /
+                   std::string(kDownloadsDirectoryName);
   RegisterCommands();
   OpenHistory(config.user_data_dir);
   // A bad config keeps the defaults; the error shows in the status bar.
@@ -785,6 +804,93 @@ void CefBrowserClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
     command_line_ = nullptr;
     CefQuitMessageLoop();
   }
+}
+
+bool CefBrowserClient::OnBeforeDownload(
+    CefRefPtr<CefBrowser> browser,
+    CefRefPtr<CefDownloadItem> download_item,
+    const CefString& suggested_name,
+    CefRefPtr<CefBeforeDownloadCallback> callback) {
+  CEF_REQUIRE_UI_THREAD();
+  // Returning true without calling `callback` cancels the download.
+  std::error_code ec;
+  std::filesystem::create_directories(downloads_dir_, ec);
+  if (ec) {
+    std::fprintf(stderr, "vrowser: download canceled: %s: %s\n",
+                 PathToUtf8(downloads_dir_).c_str(), ec.message().c_str());
+    status_message_ =
+        "Download canceled: cannot create " + PathToUtf8(downloads_dir_);
+    UpdateStatusBar();
+    return true;
+  }
+  // The suggested name comes from the page or the server. CefString converts
+  // to UTF-8.
+  const std::string name = SanitizeDownloadName(suggested_name.ToString());
+  const std::optional<std::filesystem::path> path = UniqueDownloadPath(
+      downloads_dir_, name, [this](const std::filesystem::path& candidate) {
+        for (const auto& [id, active] : active_downloads_) {
+          if (active == candidate) {
+            return true;
+          }
+        }
+        std::error_code exists_error;
+        // A broken symlink still takes the name.
+        return std::filesystem::symlink_status(candidate, exists_error)
+                   .type() != std::filesystem::file_type::not_found;
+      });
+  if (!path || !IsInsideDirectory(downloads_dir_, *path)) {
+    std::fprintf(stderr, "vrowser: download canceled: no free name for %s\n",
+                 name.c_str());
+    status_message_ = "Download canceled: no free name for " + name;
+    UpdateStatusBar();
+    return true;
+  }
+  active_downloads_[download_item->GetId()] = *path;
+  std::fprintf(stderr, "vrowser: download start %s\n",
+               PathToUtf8(*path).c_str());
+  callback->Continue(path->native(), /*show_dialog=*/false);
+  status_message_ = "Downloading " + PathToUtf8(path->filename());
+  UpdateStatusBar();
+  return true;
+}
+
+void CefBrowserClient::OnDownloadUpdated(
+    CefRefPtr<CefBrowser> browser,
+    CefRefPtr<CefDownloadItem> download_item,
+    CefRefPtr<CefDownloadItemCallback> callback) {
+  CEF_REQUIRE_UI_THREAD();
+  const uint32_t id = download_item->GetId();
+  const std::filesystem::path full_path =
+      PathFromCef(download_item->GetFullPath());
+  // Updates also arrive before OnBeforeDownload, with no path yet. A path
+  // outside the downloads directory was not chosen here.
+  if (download_item->IsInProgress() && !full_path.empty() &&
+      !IsInsideDirectory(downloads_dir_, full_path)) {
+    std::fprintf(stderr, "vrowser: download canceled: outside %s: %s\n",
+                 PathToUtf8(downloads_dir_).c_str(),
+                 PathToUtf8(full_path).c_str());
+    callback->Cancel();
+    active_downloads_.erase(id);
+    return;
+  }
+  const auto it = active_downloads_.find(id);
+  if (it == active_downloads_.end()) {
+    return;
+  }
+  const std::string file = PathToUtf8(it->second.filename());
+  if (download_item->IsComplete()) {
+    std::fprintf(stderr, "vrowser: download complete %s\n",
+                 PathToUtf8(it->second).c_str());
+    status_message_ = "Downloaded " + file;
+  } else if (download_item->IsCanceled() || download_item->IsInterrupted()) {
+    std::fprintf(stderr, "vrowser: download failed %s\n",
+                 PathToUtf8(it->second).c_str());
+    status_message_ = "Download failed: " + file;
+  } else {
+    return;
+  }
+  active_downloads_.erase(it);
+  UpdateStatusBar();
 }
 
 void CefBrowserClient::OnLoadStart(
