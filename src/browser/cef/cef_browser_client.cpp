@@ -8,10 +8,12 @@
 #include <iterator>
 #include <optional>
 #include <sstream>
+#include <tuple>
 #include <utility>
 
 #include "include/base/cef_callback.h"
 #include "include/cef_app.h"
+#include "include/cef_navigation_entry.h"
 #include "include/cef_parser.h"
 #include "include/views/cef_browser_view.h"
 #include "include/views/cef_window.h"
@@ -132,6 +134,29 @@ CommandResult ResolveOpenArgs(const char* command,
   return CommandResult::Ok();
 }
 
+// A URL typed after a bookmark command. Search text is not a bookmark.
+CommandResult ResolveBookmarkArgs(const std::vector<std::string>& args,
+                                  std::string& url) {
+  if (args.size() != 1) {
+    return CommandResult::Error("Expected one URL");
+  }
+  const UrlInput input = ClassifyUrlInput(args[0]);
+  if (input.kind == UrlInputKind::kRejected) {
+    return CommandResult::Error(input.error);
+  }
+  if (input.kind != UrlInputKind::kUrl) {
+    return CommandResult::Error("Not a URL: " + args[0]);
+  }
+  url = input.url;
+  return CommandResult::Ok();
+}
+
+std::int64_t NowMs() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+             std::chrono::system_clock::now().time_since_epoch())
+      .count();
+}
+
 // The frame that has keyboard focus according to the browser process, or an
 // empty string when there is none.
 std::string FocusedFrameId(CefRefPtr<CefBrowser> browser) {
@@ -163,7 +188,7 @@ CefBrowserClient::CefBrowserClient(const StartupConfig& config)
   navigation_.SetListener(
       [this](const std::string& url) { LoadInMainFrame(url); });
   RegisterCommands();
-  OpenHistory(config.user_data_dir);
+  OpenProfileStores(config.user_data_dir);
   // A bad config keeps the defaults; the error shows in the status bar.
   const ConfigResult user_config = LoadUserConfig(
       config.user_data_dir / kUserConfigFileName, commands_, bindings_);
@@ -271,22 +296,123 @@ void CefBrowserClient::RegisterCommands() {
         }
         return result;
       });
+  RegisterBookmarkCommands();
   CHECK(AddDefaultBindings(bindings_));
 }
 
-void CefBrowserClient::OpenHistory(const std::filesystem::path& profile_dir) {
+void CefBrowserClient::RegisterBookmarkCommands() {
+  commands_.Register("bookmark-add",
+                     "Bookmark the current page, or the URL given",
+                     [this](const std::vector<std::string>& args) {
+                       if (!bookmarks_) {
+                         return CommandResult::Error("Bookmarks are off");
+                       }
+                       std::string url;
+                       std::string title;
+                       if (args.empty()) {
+                         std::tie(url, title) = CurrentPage();
+                       } else {
+                         CommandResult result = ResolveBookmarkArgs(args, url);
+                         if (!result.ok()) {
+                           return result;
+                         }
+                       }
+                       switch (bookmarks_->Add(url, title, NowMs())) {
+                         case BookmarkAddResult::kAdded:
+                           status_message_ = "Bookmarked " + url;
+                           return CommandResult::Ok();
+                         case BookmarkAddResult::kAlreadyPresent:
+                           status_message_ = "Already bookmarked: " + url;
+                           return CommandResult::Ok();
+                         case BookmarkAddResult::kNotWebUrl:
+                           return CommandResult::Error(
+                               "Only http and https pages can be "
+                               "bookmarked");
+                         case BookmarkAddResult::kFailed:
+                           break;
+                       }
+                       return CommandResult::Error("Cannot save the bookmark");
+                     });
+  commands_.Register(
+      "bookmark-remove", "Remove the bookmark for the current page, or the URL",
+      [this](const std::vector<std::string>& args) {
+        if (!bookmarks_) {
+          return CommandResult::Error("Bookmarks are off");
+        }
+        std::string url;
+        if (args.empty()) {
+          url = CurrentPage().first;
+        } else if (args.size() == 1 && bookmarks_->Contains(args[0])) {
+          // Exactly as `bookmarks` lists it.
+          url = args[0];
+        } else if (CommandResult result = ResolveBookmarkArgs(args, url);
+                   !result.ok()) {
+          return result;
+        }
+        if (!bookmarks_->Remove(url)) {
+          return CommandResult::Error("Not bookmarked: " + url);
+        }
+        status_message_ = "Removed bookmark " + url;
+        return CommandResult::Ok();
+      });
+  commands_.Register(
+      "bookmarks", "List bookmarks in the status bar",
+      [this](const std::vector<std::string>& args) {
+        if (!args.empty()) {
+          return CommandResult::Error("Usage: bookmarks");
+        }
+        if (!bookmarks_) {
+          return CommandResult::Error("Bookmarks are off");
+        }
+        const std::vector<Bookmark> list = bookmarks_->List();
+        std::string text = std::to_string(list.size()) +
+                           (list.size() == 1 ? " bookmark" : " bookmarks");
+        for (size_t i = 0; i < list.size(); ++i) {
+          text += (i == 0 ? ": " : "  ") + list[i].url;
+          std::fprintf(stderr, "vrowser: bookmark %s\n", list[i].url.c_str());
+        }
+        status_message_ = std::move(text);
+        return CommandResult::Ok();
+      });
+}
+
+void CefBrowserClient::OpenProfileStores(
+    const std::filesystem::path& profile_dir) {
+  const std::filesystem::path path =
+      profile_dir / std::string(kProfileDatabaseFileName);
   std::string error;
-  HistoryStore store = HistoryStore::Open(
-      profile_dir / std::string(kProfileDatabaseFileName), &error);
-  if (!store.is_open()) {
-    // Browsing works without history; say why it is off.
-    std::fprintf(stderr, "vrowser: history off: %s\n", error.c_str());
-    if (status_message_.empty()) {
-      status_message_ = "History is off: " + error;
-    }
-    return;
+  HistoryStore history = HistoryStore::Open(path, &error);
+  if (history.is_open()) {
+    history_.emplace(std::move(history));
   }
-  history_.emplace(std::move(store));
+  BookmarkStore bookmarks = BookmarkStore::Open(path, &error);
+  if (bookmarks.is_open()) {
+    bookmarks_.emplace(std::move(bookmarks));
+  }
+  if (!history_ || !bookmarks_) {
+    // Browsing works without them; say why they are off.
+    std::fprintf(stderr, "vrowser: history and bookmarks off: %s\n",
+                 error.c_str());
+    if (status_message_.empty()) {
+      status_message_ = "History and bookmarks are off: " + error;
+    }
+  }
+}
+
+std::pair<std::string, std::string> CefBrowserClient::CurrentPage() const {
+  CEF_REQUIRE_UI_THREAD();
+  CefRefPtr<CefBrowser> browser = CommandBrowser();
+  if (!browser) {
+    return {};
+  }
+  // The committed URL from the browser process. The title is page-supplied
+  // and stored only as text.
+  std::string title;
+  if (CefRefPtr<CefNavigationEntry> entry =
+          browser->GetHost()->GetVisibleNavigationEntry()) {
+    title = entry->GetTitle().ToString();
+  }
+  return {browser->GetMainFrame()->GetURL().ToString(), std::move(title)};
 }
 
 void CefBrowserClient::SwitchTab(int steps) {
@@ -396,11 +522,15 @@ void CefBrowserClient::SubmitCommandLine(const std::string& text) {
   if (parsed.name.empty()) {
     return;
   }
+  // A command may leave a message, such as the bookmark list.
+  status_message_.clear();
   const CommandResult result = commands_.Execute(text);
   std::fprintf(
       stderr, "vrowser: command-line %s%s%s\n", parsed.name.c_str(),
       result.ok() ? "" : " failed: ", std::string(result.error()).c_str());
-  status_message_ = result.ok() ? std::string() : std::string(result.error());
+  if (!result.ok()) {
+    status_message_ = std::string(result.error());
+  }
   UpdateStatusBar();
 }
 
@@ -805,10 +935,8 @@ void CefBrowserClient::OnLoadStart(
   }
   // OnLoadStart runs after the navigation commits.
   if (history_) {
-    const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch());
     history_->OnCommit(browser->GetIdentifier(), frame->IsMain(),
-                       frame->GetURL().ToString(), now.count());
+                       frame->GetURL().ToString(), NowMs());
   }
 }
 
@@ -1176,6 +1304,11 @@ void CefBrowserClient::TabSmokeCloseLast() {
 //   5  the line closed and the bar reports the rejection; type `o`.
 //   6  the line is open with `open `; type `example.org` after it and
 //      submit (stage 6).
+namespace {
+// The step that types `o` and hands back to the tab smoke.
+constexpr int kLastCommandSmokeStep = 12;
+}  // namespace
+
 void CefBrowserClient::CommandSmokeStep(int step) {
   CEF_REQUIRE_UI_THREAD();
   if (smoke_finished_) {
@@ -1207,16 +1340,50 @@ void CefBrowserClient::CommandSmokeStep(int step) {
            bar.find("nope2") == std::string::npos;
       key = kTestColon;
       break;
+    // Bookmarks: add, list, and remove one through the command line. A
+    // reused profile may already hold it.
     case 4:
+      ok = CommandLineOpen();
+      text = "bookmark-add https://bookmark.example/";
+      break;
+    case 5:
+      ok = !CommandLineOpen() && normal &&
+           (bar.find("| Bookmarked https://bookmark.example/") !=
+                std::string::npos ||
+            bar.find("| Already bookmarked: https://bookmark.example/") !=
+                std::string::npos);
+      key = kTestColon;
+      break;
+    case 6:
+      ok = CommandLineOpen();
+      text = "bookmarks";
+      break;
+    case 7:
+      ok = !CommandLineOpen() && normal &&
+           bar.find(" bookmark") != std::string::npos &&
+           bar.find("https://bookmark.example/") != std::string::npos;
+      key = kTestColon;
+      break;
+    case 8:
+      ok = CommandLineOpen();
+      text = "bookmark-remove https://bookmark.example/";
+      break;
+    case 9:
+      ok = !CommandLineOpen() && normal &&
+           bar.find("| Removed bookmark https://bookmark.example/") !=
+               std::string::npos;
+      key = kTestColon;
+      break;
+    case 10:
       ok = CommandLineOpen();
       text = "open javascript:alert(1)";
       break;
-    case 5:
+    case 11:
       ok = !CommandLineOpen() && normal &&
            bar.find("| Cannot open javascript: URLs") != std::string::npos;
       key = kTestO;
       break;
-    case 6:
+    case kLastCommandSmokeStep:
       ok = CommandLineOpen() && command_line_->GetText().ToString() == "open ";
       break;
   }
@@ -1229,12 +1396,12 @@ void CefBrowserClient::CommandSmokeStep(int step) {
   if (text != nullptr) {
     command_line_->SetText(text);
   }
-  if (step == 6) {
+  if (step == kLastCommandSmokeStep) {
     // At the cursor, which must follow the prefix.
     command_line_->InsertOrReplaceText("example.org");
   }
   SendTestKeys(browser, {key});
-  if (step == 6) {
+  if (step == kLastCommandSmokeStep) {
     tab_smoke_stage_ = 6;
     return;
   }

@@ -6,7 +6,7 @@ Updated: 2026-11-23
 
 M0 (project foundation) and the first slice of M1 (one CEF window that loads
 a page) are implemented locally, along with Vim input and tabs. Storage has
-the SQLite migration runner and browsing history. Plugins are not started.
+the SQLite migration runner, browsing history, and bookmarks. Plugins are not started.
 
 ## Implemented
 
@@ -78,6 +78,12 @@ the SQLite migration runner and browsing history. Plugins are not started.
   pages, and internal pages are skipped. If the database cannot be opened,
   browsing continues and the status bar says history is off. Writes run on
   the UI thread; each is one small insert. No history UI yet.
+- Bookmarks: a `bookmarks` table in the same `vrowser.db` (migration 2, one
+  row per URL, `http`/`https` only). `:bookmark-add` saves the current page
+  (committed URL and title), or the URL given; `:bookmark-remove` removes the
+  current page's bookmark, or the URL given; `:bookmarks` lists the URLs in
+  the status bar, oldest first. No folders, import, or export, and no list
+  UI beyond the status bar yet.
 - clang-format (C++ and Objective-C), clang-tidy config, editorconfig.
 - GitHub Actions workflow that runs the unit tests on Linux, macOS, and
   Windows. Run [44557827020](https://github.com/iamcaye/vrowser/actions/runs/44557827020)
@@ -132,6 +138,8 @@ Clang 21.0.0, Ninja 1.13.2.
 | CEF Windows workflow (`cef-windows.yml` on `windows-latest`) | Built `vrowser.exe` (bootstrap) and `vrowser.dll`; sandbox left ON |
 | User config, `--vrowser-smoke-test --use-mock-keychain` with a profile `vrowserrc` | invalid file: `vrowser: config: vrowserrc:2: Unknown command: no-such-command`, page still loads, exit 0; valid file: no error, exit 0 |
 | `--vrowser-key-smoke-test` with `map j scroll-up` / `map k scroll-down` | stops at "j scrolls one line step" (remapped `j` does not scroll down); the same run without a config passes, `keys ok` |
+| `ctest --preset ci` with bookmarks | 237 tests passed, including 9 bookmark tests (add, list, remove, duplicates, rejected schemes, reopen after restart, upgrade from schema 1) |
+| `just tab-smoke` with bookmarks (macOS) | `:bookmark-add https://bookmark.example/` showed `Bookmarked https://bookmark.example/`, `:bookmarks` showed `1 bookmark: https://bookmark.example/`, `:bookmark-remove` showed `Removed bookmark https://bookmark.example/`; `vrowser.db` at schema 2; exit 0 |
 | History, two `--vrowser-smoke-test` launches on one profile (`example.com`, then `iana.org/help/example-domains`) | `vrowser.db` at schema 1 holds both rows with titles `Example Domain` and `Example Domains`; the first row survived the restart |
 | `--vrowser-key-smoke-test` with `command top-reload scroll-to-top \| reload` and `map Q top-reload` | config loads without error, `keys ok`; `command bad scroll-to-top \| nope` logs `vrowserrc:1: Unknown command: nope` |
 | `tools/check_mac_bundle.sh` against debug `Vrowser.app` | passed |
@@ -163,7 +171,7 @@ checked on this branch after the key-dispatch fixes:
 - Chrome style shows Chromium's toolbar. The Vim shell should move to Alloy
   style after the UI gaps listed in
   [runtime-style.md](../architecture/runtime-style.md) are closed.
-- No tab strip, history, or bookmarks.
+- No tab strip, and no history or bookmark list UI beyond the status bar.
 - On Windows a raw key-down for Shift+`;` has no character, so `:` may not
   match there; not run.
 - The status bar's character budget assumes about 7 px per character of a

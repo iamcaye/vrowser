@@ -12,6 +12,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <utility>
 
 #include "include/cef_client.h"
 #include "include/views/cef_browser_view.h"
@@ -22,6 +23,7 @@
 #include "vrowser/core/startup_config.hpp"
 #include "vrowser/commands/command_registry.hpp"
 #include "vrowser/core/tab_list.hpp"
+#include "vrowser/storage/bookmarks.hpp"
 #include "vrowser/storage/history.hpp"
 #include "vrowser/vim/key_bindings.hpp"
 #include "vrowser/vim/key_dispatcher.hpp"
@@ -177,8 +179,14 @@ class CefBrowserClient : public CefClient,
                     std::initializer_list<TestKey> keys,
                     int64_t delay_ms = 0);
   void RegisterCommands();
-  // Opens the profile database for history. Failure leaves history off.
-  void OpenHistory(const std::filesystem::path& profile_dir);
+  // `bookmark-add`, `bookmark-remove`, and `bookmarks`.
+  void RegisterBookmarkCommands();
+  // Opens the profile database for history and bookmarks. Failure leaves
+  // them off.
+  void OpenProfileStores(const std::filesystem::path& profile_dir);
+  // The committed URL and title of CommandBrowser()'s main frame, for
+  // commands that act on the current page. Empty URL when there is none.
+  std::pair<std::string, std::string> CurrentPage() const;
   // Scrolls the focused frame of CommandBrowser(), or its main frame when no
   // frame has focus.
   void ScrollFocusedFrame(ScrollMotion motion, int count);
@@ -268,6 +276,8 @@ class CefBrowserClient : public CefClient,
   std::string status_message_;
   // Visits in the profile database. Empty when it could not be opened.
   std::optional<HistoryRecorder> history_;
+  // Bookmarks in the profile database. Empty when it could not be opened.
+  std::optional<BookmarkStore> bookmarks_;
   std::set<TabId> loading_tabs_;
 
   IMPLEMENT_REFCOUNTING(CefBrowserClient);

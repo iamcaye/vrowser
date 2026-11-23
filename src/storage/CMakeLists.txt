@@ -37,7 +37,8 @@ if(MSVC)
     MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
-add_library(vrowser_storage STATIC history.cpp migrations.cpp)
+add_library(vrowser_storage STATIC bookmarks.cpp history.cpp migrations.cpp
+  profile_database.cpp)
 target_include_directories(vrowser_storage PUBLIC
   "${PROJECT_SOURCE_DIR}/include")
 target_link_libraries(vrowser_storage PRIVATE vrowser_sqlite)
