@@ -200,16 +200,77 @@ TEST_F(KeyDispatcherTest, EditableFocusClearsPendingSequence) {
   EXPECT_EQ(state_.sequence.count, 3);
   EXPECT_FALSE(state_.sequence.keys.empty());
 
-  NoteEditableFocus(state_, true);
+  EXPECT_TRUE(NoteFrameFocus(state_, "main", true, "main"));
   EXPECT_EQ(state_.mode.mode(), Mode::kInsert);
   EXPECT_EQ(state_.sequence.count, 0);
   EXPECT_TRUE(state_.sequence.keys.empty());
 
-  NoteEditableFocus(state_, false);
+  EXPECT_TRUE(NoteFrameFocus(state_, "main", false, "main"));
   EXPECT_EQ(state_.mode.mode(), Mode::kNormal);
   const KeyDispatch dispatch = Send(Down("r", U'r'));
   EXPECT_EQ(dispatch.count, 1);
   EXPECT_FALSE(dispatch.has_count);
+}
+
+TEST_F(KeyDispatcherTest, ChildFrameInputEntersInsertAndBlurLeavesIt) {
+  NoteFrameFocus(state_, "main", false, "main");
+  EXPECT_TRUE(NoteFrameFocus(state_, "child", true, "child"));
+  EXPECT_EQ(state_.mode.mode(), Mode::kInsert);
+  EXPECT_EQ(Send(Down("r", U'r')).disposition, KeyDisposition::kForward);
+
+  EXPECT_TRUE(NoteFrameFocus(state_, "child", false, "child"));
+  EXPECT_EQ(state_.mode.mode(), Mode::kNormal);
+}
+
+TEST_F(KeyDispatcherTest, LateParentBlurDoesNotLeaveChildInput) {
+  NoteFrameFocus(state_, "main", true, "main");
+  NoteFrameFocus(state_, "child", true, "child");
+  // The parent's blur arrives last, from another renderer.
+  EXPECT_FALSE(NoteFrameFocus(state_, "main", false, "child"));
+  EXPECT_EQ(state_.mode.mode(), Mode::kInsert);
+}
+
+TEST_F(KeyDispatcherTest, FocusMovingToTheParentLeavesAStaleChildInput) {
+  NoteFrameFocus(state_, "child", true, "child");
+  ASSERT_EQ(state_.mode.mode(), Mode::kInsert);
+  // The child never reports a blur; the parent reports its button.
+  EXPECT_TRUE(NoteFrameFocus(state_, "main", false, "main"));
+  EXPECT_EQ(state_.mode.mode(), Mode::kNormal);
+}
+
+TEST_F(KeyDispatcherTest, SyncFollowsTheBrowsersFocusedFrame) {
+  // The child's report arrived before the browser moved focus to it.
+  EXPECT_FALSE(NoteFrameFocus(state_, "child", true, "main"));
+  EXPECT_EQ(state_.mode.mode(), Mode::kNormal);
+  EXPECT_TRUE(SyncFrameFocus(state_, "child"));
+  EXPECT_EQ(state_.mode.mode(), Mode::kInsert);
+  EXPECT_FALSE(SyncFrameFocus(state_, "child"));
+}
+
+TEST_F(KeyDispatcherTest, SyncKeepsEscapeInAField) {
+  NoteFrameFocus(state_, "child", true, "child");
+  EXPECT_EQ(Send(Down("Escape")).disposition, KeyDisposition::kConsume);
+  ASSERT_EQ(state_.mode.mode(), Mode::kNormal);
+  EXPECT_FALSE(SyncFrameFocus(state_, "child"));
+  EXPECT_EQ(state_.mode.mode(), Mode::kNormal);
+  // A report from another frame does not re-enter Insert either.
+  NoteFrameFocus(state_, "main", false, "child");
+  EXPECT_EQ(state_.mode.mode(), Mode::kNormal);
+}
+
+TEST_F(KeyDispatcherTest, SyncKeepsAPendingSequenceWhenNothingChanged) {
+  NoteFrameFocus(state_, "main", false, "main");
+  Send(Down("g", U'g'));
+  SyncFrameFocus(state_, "main");
+  EXPECT_FALSE(state_.sequence.keys.empty());
+}
+
+TEST_F(KeyDispatcherTest, NavigationLeavesInsert) {
+  NoteFrameFocus(state_, "main", true, "main");
+  ASSERT_EQ(state_.mode.mode(), Mode::kInsert);
+  NoteNavigation(state_);
+  EXPECT_EQ(state_.mode.mode(), Mode::kNormal);
+  EXPECT_FALSE(state_.mode.editable_focused());
 }
 
 TEST_F(KeyDispatcherTest, CommandAndHintOnlyHandleEscape) {

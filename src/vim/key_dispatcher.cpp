@@ -155,10 +155,24 @@ KeyDispatch DispatchNormal(const KeyBindings& bindings,
 
 }  // namespace
 
-void NoteEditableFocus(KeyInputState& state, bool editable) {
+bool SyncFrameFocus(KeyInputState& state, std::string_view focused_frame) {
+  const bool editable = state.frame_focus.Editable(focused_frame);
+  if (editable == state.mode.editable_focused()) {
+    return false;
+  }
   state.mode.Apply(editable ? ModeEvent::kEditableFocusGained
                             : ModeEvent::kEditableFocusLost);
   state.sequence = KeySequenceState{};
+  return true;
+}
+
+bool NoteFrameFocus(KeyInputState& state,
+                    std::string_view frame,
+                    bool editable,
+                    std::string_view focused_frame) {
+  state.frame_focus.Report(frame, editable);
+  state.sequence = KeySequenceState{};
+  return SyncFrameFocus(state, focused_frame);
 }
 
 void TransferHeldKeys(KeyInputState& from, KeyInputState& to) {
@@ -183,6 +197,8 @@ void TransferHeldKeys(KeyInputState& from, KeyInputState& to) {
 void NoteNavigation(KeyInputState& state) {
   state.consumed_keys.clear();
   state.suppress_chars = false;
+  state.frame_focus.Clear();
+  SyncFrameFocus(state, {});
 }
 
 KeyDispatch DispatchKey(const KeyBindings& bindings,

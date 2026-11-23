@@ -5,8 +5,10 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
+#include "vrowser/vim/frame_focus.hpp"
 #include "vrowser/vim/key_bindings.hpp"
 #include "vrowser/vim/key_event.hpp"
 #include "vrowser/vim/mode_machine.hpp"
@@ -30,6 +32,8 @@ struct ConsumedPress {
 struct KeyInputState {
   ModeMachine mode;
   KeySequenceState sequence;
+  // Editable focus per frame; `mode` follows the focused frame's entry.
+  FrameFocus frame_focus;
   // Presses whose key-down was consumed. The matching key-up is consumed too.
   // A key-up matches when the key is the same and its modifiers are a subset
   // of the key-down's (a platform may release Shift before the key-up). A
@@ -89,9 +93,21 @@ KeyDispatch DispatchKey(const KeyBindings& bindings,
                         KeyInputState& state,
                         const KeyEvent& event);
 
-// Focus reported by the renderer. Switches Normal/Insert and drops any
-// pending count or key sequence. The page moved on; the old prefix did not.
-void NoteEditableFocus(KeyInputState& state, bool editable);
+// `frame` reported from its renderer whether its focused node is editable.
+// `focused_frame` is the frame that has focus according to the browser
+// process (empty when unknown). Switches Normal/Insert when the focused
+// frame's state changes, and drops any pending count or key sequence: the
+// page moved on, the old prefix did not. Returns true when the editable
+// state of the tab changed.
+bool NoteFrameFocus(KeyInputState& state,
+                    std::string_view frame,
+                    bool editable,
+                    std::string_view focused_frame);
+
+// Re-reads the focused frame, as before a key: focus can move between frames
+// after their reports arrived. Changes nothing, not even a pending sequence,
+// when the editable state is the same. Returns true when it changed.
+bool SyncFrameFocus(KeyInputState& state, std::string_view focused_frame);
 
 // The shell moved from one tab to another while keys may still be down, as
 // after `gt`. Moves the consumed presses of `from` to `to`, so their key-ups
@@ -99,7 +115,8 @@ void NoteEditableFocus(KeyInputState& state, bool editable);
 void TransferHeldKeys(KeyInputState& from, KeyInputState& to);
 
 // Main-frame navigation. Drops consumed-press tracking so a key-up that the
-// load discarded cannot swallow a later key-up of the same key.
+// load discarded cannot swallow a later key-up of the same key. The old
+// document's frames are gone, so editable focus is cleared and Insert ends.
 void NoteNavigation(KeyInputState& state);
 
 }  // namespace vrowser

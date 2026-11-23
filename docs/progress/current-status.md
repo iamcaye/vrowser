@@ -54,8 +54,11 @@ started.
   repeats `r` (`3r`) and multiplies a scroll step (`5j`).
   OS key repeat does not repeat a binding; holding `j`, `k`, `d`, or `u`
   keeps scrolling until the key is released.
-  A main-frame load drops consumed key-up tracking, and editable focus clears
-  a pending key sequence.
+  A main-frame load drops consumed key-up tracking and ends Insert, and
+  editable focus clears a pending key sequence. Insert follows the focused
+  frame: an input or content-editable region in a child frame (also
+  out-of-process) selects Insert, and focus moving to a non-editable element
+  in another frame returns to Normal.
 - clang-format (C++ and Objective-C), clang-tidy config, editorconfig.
 - GitHub Actions workflow that runs the unit tests on Linux, macOS, and
   Windows. Run [44557827020](https://github.com/iamcaye/vrowser/actions/runs/44557827020)
@@ -91,7 +94,7 @@ Clang 21.0.0, Ninja 1.13.2.
 | Relaunch with `--url=https://www.iana.org/help/example-domains` into a running app | `vrowser: load-end 200 https://www.iana.org/help/example-domains` in the first process |
 | `just tab-smoke` (`--vrowser-tab-smoke-test --use-alloy-style`) | status bar showed `NORMAL  https://example.com/  loading` on both tabs; `t` opened the second tab; `gt` wrapped to tab 1, `gT` wrapped to tab 2; `x` closed tab 2 (`vrowser-smoke: tabs ok, 1 open, remaining visible`); macOS command line: `:nope` reported `Unknown command: nope`, `:` + Escape ran nothing, `:open javascript:alert(1)` reported `Cannot open javascript: URLs`, `o` opened the line with `open `, and `example.org` typed after it loaded `https://example.org/`; `x` on the last tab quit, exit 0 (3 runs) |
 | `--vrowser-tab-smoke-test` in Chrome style | `vrowser: tabs need --use-alloy-style`, exit 1 (second Chrome-style browser view is never created) |
-| `just key-smoke` (`--vrowser-key-smoke-test`, Chrome style) | unbound `q` reached the page, `r` ran `reload` and did not, focused field selected Insert, Escape returned to Normal and did not reach the page; `j` 60, `3j` 240, `k` 180, `G` bottom, `gg` 0, `d` half a viewport, `u` 0, no motion key reached the page; `jjj` typed quickly ended at 180 like `3j`, held `j` kept scrolling and stopped on key-up, held `j` with no key-up stopped on its own, `H` went back from a second page, `H` at the start did nothing, `L` went forward; `vrowser-smoke: keys ok`, exit 0 (three runs) |
+| `just key-smoke` (`--vrowser-key-smoke-test`, Chrome style) | unbound `q` reached the page, `r` ran `reload` and did not, focused field selected Insert, Escape returned to Normal and did not reach the page; `j` 60, `3j` 240, `k` 180, `G` bottom, `gg` 0, `d` half a viewport, `u` 0, no motion key reached the page; `jjj` typed quickly ended at 180 like `3j`, held `j` kept scrolling and stopped on key-up, held `j` with no key-up stopped on its own, `H` went back from a second page, `H` at the start did nothing, `L` went forward; an input in a child frame selected Insert and `r` reached it, focusing a main-frame button returned to Normal, a contenteditable region selected Insert and its blur returned to Normal; `vrowser-smoke: keys ok`, exit 0 (three runs) |
 | `--vrowser-key-smoke-test --use-alloy-style` | not supported: synthesized keys never reach Alloy pages, even without a keyboard handler; exits 1 with a message |
 | Real keyboard, Chrome style and `--use-alloy-style` (manual, `https://duckduckgo.com`) | `r` reloads and stays out of the page, a focused field selects Insert and types `r`, Escape returns to Normal and does not reach the field, the next `r` reloads; `3r` reloads three times; a held `r` reloads once; Cmd+L and unbound keys still reach the browser and page |
 | Scroll bindings, real keyboard, Chrome style and `--use-alloy-style` (manual, long Wikipedia page) | `j`/`k` move a line step, `5j` five steps, `d`/`u` half a page, `G` bottom, `gg` top; `j` in a focused field types and does not scroll, and scrolls again after Escape |
@@ -166,12 +169,12 @@ Vim shell. Details in
 ## Next unblocked work
 
 Normal and Insert modes work in the window (#18), Normal mode scrolls the
-page (#19), and `t`/`gt`/`gT`/`x` open, switch, and close tabs (#32, #58). Following focus into iframes (#23) builds on
-the same dispatcher. Real typing was
+page (#19), and `t`/`gt`/`gT`/`x` open, switch, and close tabs (#32, #58). Insert follows focus across frames (#23). Link hints (#22) build
+on the same dispatcher. Real typing was
 checked by hand on macOS in both Chrome and Alloy styles. Permission handling should follow
 Alloy's client-owned prompt path.
 
 ## Recommended next task
 
-[Follow focus across editable elements and frames](https://github.com/iamcaye/vrowser/issues/23)
-(the only open `priority:p0`).
+[Add link hints](https://github.com/iamcaye/vrowser/issues/22). No
+`priority:p0` issue is open.
