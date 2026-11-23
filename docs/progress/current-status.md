@@ -100,6 +100,7 @@ Clang 21.0.0, Ninja 1.13.2.
 | History keys, real keyboard, Chrome style and `--use-alloy-style` (manual, Wikipedia links) | `H` back and `L` forward, `H` on the first page does nothing and stays out of the page, `H` then `L` quickly works, `H`/`L` in a text field are typed |
 | Status bar, real keyboard, `--use-alloy-style` (manual, Wikipedia) | visible and readable; `INSERT` in a text field, `NORMAL` after Escape; pending `3` and `g` shown; `loading` during loads; URL follows links, `H`/`L`, `t`, `gt`, `gT`; a long URL is cut after the host; Chrome style has no bar |
 | Command line, real keyboard, `--use-alloy-style` (manual) | `:` opens the line, `open https://neovim.io` + Enter loads it; `:` + Escape runs nothing; `:nope` reports `Unknown command: nope`; clicking the page closes the line |
+| Open and search, real keyboard, `--use-alloy-style` (manual) | `o` + `example.com` loads `https://example.com`; `O` + `vim motions` opens a new tab with the DuckDuckGo results; `:open javascript:alert(1)` shows the error and no alert; `:open localhost:8080` goes to `https://localhost:8080` |
 | Chrome-style smoke (`--vrowser-smoke-test`) | exit 0, `vrowser-smoke: ok 200` |
 | Alloy-style smoke (`--use-alloy-style --vrowser-smoke-test`) | exit 0, `vrowser-smoke: ok 200` |
 | `https://expired.badssl.com/` Chrome style | Chromium keeps the error UI; no client data URL |
