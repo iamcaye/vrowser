@@ -6,7 +6,8 @@ Updated: 2026-11-23
 
 M0 (project foundation) and the first slice of M1 (one CEF window that loads
 a page) are implemented locally, along with Vim input and tabs. Storage has
-the SQLite migration runner and browsing history. Plugins are not started.
+the SQLite migration runner and browsing history. Plugins are not started; the plugin API is proposed in
+[RFC 0002](../rfcs/0002-plugins.md).
 
 ## Implemented
 
