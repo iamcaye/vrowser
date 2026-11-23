@@ -122,7 +122,18 @@ create more than one tab and can report frame focus.
 - Editable focus. The renderer's `CefRendererApp::OnFocusedNodeChanged` sends
   `vrowser.editable-focus` with one bool. The browser accepts only that message
   shape from `PID_RENDERER` and uses it only to switch that tab between Normal
-  and Insert. Focus inside cross-process iframes is #23.
+  and Insert. When CEF gives no frame (focus left every node), the renderer
+  reports for its own focused frame, so an out-of-process iframe's blur is
+  not taken for the main frame's.
+- Frame focus. Each frame reports from its own renderer, so reports from
+  different processes arrive in any order, and a frame that loses focus to
+  another frame may never report a blur. `FrameFocus` (`src/vim`) keeps the
+  last report of each frame, keyed by the browser-side frame identifier, and
+  the tab is editable only when the frame that has focus in the browser
+  process (`CefBrowser::GetFocusedFrame`) reported an editable node. It is
+  re-read on each report and before each key-down, and cleared by a
+  main-frame load, which also ends Insert. A page cannot pick the frame a
+  report is filed under.
 - Default bindings: `r` reloads; `j`/`k` scroll one 60px line step, `d`/`u`
   half the viewport, `gg`/`G` to the top and bottom. Line and half-page
   motions multiply by the count; `gg` and `G` ignore it. A command runs in

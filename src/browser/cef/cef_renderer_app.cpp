@@ -10,8 +10,13 @@ namespace vrowser {
 void CefRendererApp::OnFocusedNodeChanged(CefRefPtr<CefBrowser> browser,
                                           CefRefPtr<CefFrame> frame,
                                           CefRefPtr<CefDOMNode> node) {
-  // `frame` and `node` are empty when focus leaves every node.
-  CefRefPtr<CefFrame> target = frame ? frame : browser->GetMainFrame();
+  // `frame` and `node` are empty when focus leaves every node. The report then
+  // belongs to this renderer's focused frame, which in an out-of-process
+  // iframe is not the main frame.
+  CefRefPtr<CefFrame> target = frame ? frame : browser->GetFocusedFrame();
+  if (!target) {
+    target = browser->GetMainFrame();
+  }
   if (!target) {
     return;
   }

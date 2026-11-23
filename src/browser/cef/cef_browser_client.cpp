@@ -130,6 +130,13 @@ CommandResult ResolveOpenArgs(const char* command,
   return CommandResult::Ok();
 }
 
+// The frame that has keyboard focus according to the browser process, or an
+// empty string when there is none.
+std::string FocusedFrameId(CefRefPtr<CefBrowser> browser) {
+  CefRefPtr<CefFrame> frame = browser->GetFocusedFrame();
+  return frame ? frame->GetIdentifier().ToString() : std::string();
+}
+
 // Keep-alives are throttled; OS repeat can be far faster than needed.
 constexpr auto kHeldKeepAliveInterval = std::chrono::milliseconds(150);
 
@@ -559,13 +566,19 @@ bool CefBrowserClient::OnProcessMessageReceived(
     return true;
   }
   const bool editable = args->GetBool(0);
-  if (editable && held_scroll_ &&
-      held_scroll_->tab == browser->GetIdentifier()) {
-    StopHeldScroll();
+  if (!frame) {
+    return true;
   }
   KeyInputState& input = key_inputs_[browser->GetIdentifier()];
   const Mode before = input.mode.mode();
-  NoteEditableFocus(input, editable);
+  // The frame comes from the browser process: a renderer can only report on
+  // its own frames, and only the focused frame's report selects the mode.
+  NoteFrameFocus(input, frame->GetIdentifier().ToString(), editable,
+                 FocusedFrameId(browser));
+  if (input.mode.editable_focused() && held_scroll_ &&
+      held_scroll_->tab == browser->GetIdentifier()) {
+    StopHeldScroll();
+  }
   UpdateStatusBar();
   if (input.mode.mode() != before) {
     std::fprintf(stderr, "vrowser: mode %s\n",
@@ -592,6 +605,10 @@ bool CefBrowserClient::OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
   }
   KeyInputState& input = key_inputs_[browser->GetIdentifier()];
   const Mode before = input.mode.mode();
+  // Focus may have moved to another frame since that frame reported.
+  if (key->key_down) {
+    SyncFrameFocus(input, FocusedFrameId(browser));
+  }
   const KeyDispatch dispatch = DispatchKey(bindings_, input, *key);
   if (input.mode.mode() != before) {
     std::fprintf(stderr, "vrowser: mode %s\n",
@@ -1224,12 +1241,19 @@ namespace vrowser {
 std::string CefBrowserClient::KeySmokePageUrl() {
   // Logs every keydown the page sees into the title, with the focused id, and
   // every scroll as "scroll:<y>", "scroll:half" (half a viewport down), or
-  // "scroll:bottom". The spacer makes the page taller than the window.
+  // "scroll:bottom". Keys in the child frame are logged as "frame-<id>". The
+  // spacer makes the page taller than the window.
   return DataUri(
-      "<!doctype html><title>ready</title><input id=f>"
+      "<!doctype html><title>ready</title><input id=f><button id=b>b</button>"
+      "<div id=e contenteditable>edit</div>"
+      "<iframe id=i srcdoc=\"<input id=g>\" height=40></iframe>"
       "<div style=\"height:5000px\"></div>"
       "<script>addEventListener('keydown', e => { document.title = 'key:' + "
       "e.key + ':' + (document.activeElement.id || 'body'); }, true);"
+      "const i = document.getElementById('i'); i.onload = () => "
+      "i.contentWindow.addEventListener('keydown', e => { document.title = "
+      "'key:' + e.key + ':frame-' + (i.contentDocument.activeElement.id || "
+      "'body'); }, true);"
       "addEventListener('scroll', () => { const y = scrollY;"
       " const max = document.scrollingElement.scrollHeight - innerHeight;"
       " document.title = 'scroll:' + (y > 0 && y >= max - 1 ? 'bottom'"
@@ -1341,11 +1365,13 @@ void CefBrowserClient::KeySmokeStep(CefRefPtr<CefBrowser> browser,
   // From step 7 on every key is a bound motion, so the page must see none.
   constexpr int kFirstScrollStep = 7;
   constexpr int kHoldStep = 14;
+  // From here on the page is loaded again and focus moves between frames.
+  constexpr int kFrameStep = 19;
   if (event == "title key:r:body" || event.starts_with("title key:Escape") ||
       event == "title timeout:running" ||
       (event.starts_with("title hold:") &&
        event != "title hold:moved:stopped") ||
-      (key_smoke_step_ >= kFirstScrollStep &&
+      (key_smoke_step_ >= kFirstScrollStep && key_smoke_step_ <= kFrameStep &&
        event.starts_with("title key:"))) {
     std::fprintf(stderr, "vrowser-smoke: keys failed, page saw %s\n",
                  event.c_str());
@@ -1400,7 +1426,13 @@ void CefBrowserClient::KeySmokeStep(CefRefPtr<CefBrowser> browser,
        "goes forward",
        {kTestShiftH, kTestShiftL},
        2},
-      {"title second", "done", {}, 0},
+      {"title second", "load the first page again", {}, 0},
+      {"load-end", "focus the input in the child frame", {}, 0},
+      {"mode insert", "child frame input is Insert; r goes to it", {kTestR}, 1},
+      {"title key:r:frame-g", "focus a button in the main frame", {}, 0},
+      {"mode normal", "Normal again; focus the contenteditable region", {}, 0},
+      {"mode insert", "contenteditable is Insert; blur it", {}, 0},
+      {"mode normal", "done", {}, 0},
   };
   constexpr int kStepCount = static_cast<int>(std::size(kSteps));
   if (key_smoke_step_ >= kStepCount ||
@@ -1419,6 +1451,32 @@ void CefBrowserClient::KeySmokeStep(CefRefPtr<CefBrowser> browser,
   if (index == 2) {
     browser->GetMainFrame()->ExecuteJavaScript(
         "document.getElementById('f').focus()", "", 0);
+    return;
+  }
+  if (index == kFrameStep) {
+    browser->GetMainFrame()->LoadURL(KeySmokePageUrl());
+    return;
+  }
+  // Focus changes made by page script, as a click would make them.
+  const char* focus_script = nullptr;
+  switch (index - kFrameStep) {
+    case 1:
+      focus_script =
+          "document.getElementById('i').contentDocument.getElementById('g')"
+          ".focus()";
+      break;
+    case 3:
+      focus_script = "document.getElementById('b').focus()";
+      break;
+    case 4:
+      focus_script = "document.getElementById('e').focus()";
+      break;
+    case 5:
+      focus_script = "document.getElementById('e').blur()";
+      break;
+  }
+  if (focus_script != nullptr) {
+    browser->GetMainFrame()->ExecuteJavaScript(focus_script, "", 0);
     return;
   }
   // The probes record scrollY, wait 300 ms, and report whether the page moved
@@ -1449,7 +1507,7 @@ void CefBrowserClient::KeySmokeStep(CefRefPtr<CefBrowser> browser,
   // OnFocusedNodeChanged can arrive before the editor is ready to take a key.
   // Sending immediately is flaky on Linux: the event is forwarded but never
   // becomes a DOM keydown. A short delay after focus lets it settle.
-  const int64_t delay_ms = index == 3 ? 200 : 0;
+  const int64_t delay_ms = index == 3 || index == kFrameStep + 2 ? 200 : 0;
   for (int i = 0; i < step.key_count; ++i) {
     CefPostDelayedTask(
         TID_UI,
