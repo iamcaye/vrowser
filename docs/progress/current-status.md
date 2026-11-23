@@ -26,7 +26,8 @@ the SQLite migration runner but no tables. Plugins are not started.
 - GoogleTest tests for startup switches, the command registry, mode
   transitions, key normalization, key bindings, counts, navigation
   requests, command-line URL classification, the tab list, key
-  dispatch, and SQLite migrations against temporary database files.
+  dispatch, SQLite migrations against temporary database files, and the
+  user config file.
 - A second launch with `--url` loads that URL in the running window.
 - Core `TabList` and tabs in the main window (Alloy style only): each tab is a
   browser view under a fill layout, only the active one is visible, closing a
@@ -59,6 +60,11 @@ the SQLite migration runner but no tables. Plugins are not started.
   frame: an input or content-editable region in a child frame (also
   out-of-process) selects Insert, and focus moving to a non-editable element
   in another frame returns to Normal.
+- C++20 library `vrowser_config`: `vrowserrc` in the profile directory is
+  read at startup and applied to the Normal-mode bindings (`map`, `unmap`,
+  comments). Commands must exist in the registry; an invalid file changes
+  nothing and its error, with the line number, shows in the status bar.
+  A missing file keeps the defaults.
 - C++20 library `vrowser_storage` with `Database` (an owned SQLite handle)
   and `ApplyMigrations`, which applies numbered migrations once, records the
   version in `PRAGMA user_version`, and rolls back a failing migration
@@ -93,7 +99,7 @@ Clang 21.0.0, Ninja 1.13.2.
 
 | Check | Result |
 | --- | --- |
-| `cmake --preset ci && cmake --build --preset ci && ctest --preset ci` | 194 tests passed (includes 9 migration tests) |
+| `cmake --preset ci && cmake --build --preset ci && ctest --preset ci` | 208 tests passed (includes 14 user-config tests) |
 | `ctest --test-dir build/debug` | 9 tests passed (older local debug tree) |
 | `cmake --preset debug && cmake --build --preset debug` | Built `Vrowser.app` and five helper bundles |
 | CEF macOS arm64 archive SHA256 | `22a510e5d348a907953278b618e1e9e442ccf78773b9fee0e09eaf154eef53b0` |
@@ -118,6 +124,8 @@ Clang 21.0.0, Ninja 1.13.2.
 | `open build/debug/apps/desktop/Debug/Vrowser.app --args --url=https://example.com` | Launched |
 | CEF Linux workflow (`cef-linux.yml` on `ubuntu-latest`) | Built `vrowser` and `chrome-sandbox`; sandbox left ON |
 | CEF Windows workflow (`cef-windows.yml` on `windows-latest`) | Built `vrowser.exe` (bootstrap) and `vrowser.dll`; sandbox left ON |
+| User config, `--vrowser-smoke-test --use-mock-keychain` with a profile `vrowserrc` | invalid file: `vrowser: config: vrowserrc:2: Unknown command: no-such-command`, page still loads, exit 0; valid file: no error, exit 0 |
+| `--vrowser-key-smoke-test` with `map j scroll-up` / `map k scroll-down` | stops at "j scrolls one line step" (remapped `j` does not scroll down); the same run without a config passes, `keys ok` |
 | `tools/check_mac_bundle.sh` against debug `Vrowser.app` | passed |
 | `tools/check_mac_bundle.sh` against missing-helper fixture | failed as expected |
 

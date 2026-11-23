@@ -18,6 +18,7 @@
 #include "include/wrapper/cef_helpers.h"
 #include "browser/cef/cef_renderer_app.hpp"
 #include "browser/cef/views_delegates.hpp"
+#include "vrowser/config/user_config.hpp"
 #include "vrowser/core/url_input.hpp"
 #include "vrowser/ui/status_line.hpp"
 #include "vrowser/vim/default_bindings.hpp"
@@ -161,6 +162,13 @@ CefBrowserClient::CefBrowserClient(const StartupConfig& config)
   navigation_.SetListener(
       [this](const std::string& url) { LoadInMainFrame(url); });
   RegisterCommands();
+  // A bad config keeps the defaults; the error shows in the status bar.
+  const ConfigResult user_config = LoadUserConfig(
+      config.user_data_dir / kUserConfigFileName, commands_, bindings_);
+  if (!user_config.ok) {
+    std::fprintf(stderr, "vrowser: config: %s\n", user_config.error.c_str());
+    status_message_ = user_config.error;
+  }
   PlatformWatchKeyUps(true);
 }
 

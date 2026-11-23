@@ -4,6 +4,7 @@ set(VERSION_SHORT "${PROJECT_VERSION}")
 
 set(VROWSER_SHARED_SOURCES
   "${CMAKE_SOURCE_DIR}/src/commands/command_registry.cpp"
+  "${CMAKE_SOURCE_DIR}/src/config/user_config.cpp"
   "${CMAKE_SOURCE_DIR}/src/core/navigation.cpp"
   "${CMAKE_SOURCE_DIR}/src/core/scroll.cpp"
   "${CMAKE_SOURCE_DIR}/src/core/startup_config.cpp"

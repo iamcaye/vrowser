@@ -29,6 +29,7 @@ add_subdirectory(src/commands)
 add_subdirectory(src/vim)
 add_subdirectory(src/ui)
 add_subdirectory(src/storage)
+add_subdirectory(src/config)
 
 if(VROWSER_BUILD_TESTS)
   enable_testing()
