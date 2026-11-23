@@ -18,3 +18,6 @@ must not include CEF headers.
   leading digits form a count (`12j`); `0` is a key unless a count started.
 - `AddDefaultBindings` (`default_bindings.cpp`): the built-in Normal-mode
   table (`r`, `j`, `k`, `d`, `u`, `gg`, `G`).
+- Hints (`hints.cpp`): `AssignHintLabels` gives each element box a
+  prefix-free label, and `HintSession` matches typed keys against them.
+  Hint-mode keys are consumed by `DispatchKey` and reported in `hint_key`.

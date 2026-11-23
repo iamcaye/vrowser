@@ -227,6 +227,12 @@ KeyDispatch DispatchKey(const KeyBindings& bindings,
     state.sequence = KeySequenceState{};
     return FinishDown(state, event, ConsumedResult());
   }
+  if (state.mode.mode() == Mode::kHint && !event.modifiers.control &&
+      !event.modifiers.alt && !event.modifiers.meta) {
+    KeyDispatch dispatch = ConsumedResult();
+    dispatch.hint_key = event.key;
+    return FinishDown(state, event, std::move(dispatch));
+  }
   return FinishDown(state, event, KeyDispatch{});
 }
 

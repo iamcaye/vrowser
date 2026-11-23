@@ -68,6 +68,8 @@ struct KeyDispatch {
   std::optional<BindingAction> action;
   int count{1};
   bool has_count{false};
+  // Hint mode: the key typed toward a label ("a", "Backspace", ...).
+  std::optional<std::string> hint_key;
 };
 
 // Decides what one key does in the tab's current mode.
@@ -76,8 +78,11 @@ struct KeyDispatch {
 // matches nothing is forwarded, unless it abandons a pending sequence or
 // count, which is consumed and discarded. Escape clears a pending sequence.
 // Insert: keys go to the page, except Escape, which returns to Normal and is
-// consumed. Command and Hint have no UI yet: Escape returns to Normal, other
-// keys are forwarded.
+// consumed. Hint: Escape returns to Normal; every other key without Control,
+// Alt, or Meta is consumed and reported in `hint_key`, so the page never sees
+// a key typed toward a label. Keys with those modifiers are forwarded, so
+// browser shortcuts still work. Command has no key handling here: Escape
+// returns to Normal, other keys are forwarded.
 //
 // OS key repeat does not run a binding again. A repeat of a consumed press is
 // consumed; when that press completed a binding, the repeat and the key-up

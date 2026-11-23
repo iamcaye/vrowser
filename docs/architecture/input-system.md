@@ -85,12 +85,30 @@ A Windows raw key-down carries no character, so there `:` would read as
 
 ## Hints
 
-Hint mode labels visible links in the focused frame and in child frames that
-are part of the same tab. Labels are generated from a configurable charset.
-Typing a unique label activates the link. Hint mode does not inject a
-persistent content script. The first implementation can use a short-lived
-DOM query from the renderer process. That work waits until the browser can
-create more than one tab and can report frame focus.
+`f` (`hint-follow`) enters Hint mode in the current tab:
+
+1. The browser process sends `vrowser.hint-collect` to the focused frame, or
+   the main frame when none is focused. The renderer evaluates a short script
+   in that frame. The script finds the visible links and controls that a
+   click would reach and returns their boxes. The script's controller object
+   stays in the renderer; nothing is added to `window`, and no script stays
+   in the page after Hint mode ends.
+2. The browser process assigns labels (`AssignHintLabels` in `src/vim`):
+   prefix-free, home-row first, and shortest in reading order. It sends them
+   back, and the renderer draws them in a closed shadow root.
+3. In Hint mode every key without Control, Alt, or Meta is consumed and
+   never reaches the page. A key that continues a label filters the labels,
+   and Backspace undoes one character. A whole label ends Hint mode and
+   focuses the element (text fields) or clicks it. Escape removes the labels
+   and returns to Normal. A main-frame load also ends Hint mode.
+
+The script runs in the page's JavaScript world, so a page can hide its own
+elements from hints or misplace their labels. It cannot see the keys or the
+labels, and only element boxes come back to the browser process, which
+checks the request ID and the frame before using them. Labels appear only in
+the hinted frame. Elements inside child frames are not hinted, and a click
+from a label is not a user gesture, so a `target=_blank` link can be blocked
+as a popup.
 
 ## What the prototype handles today
 

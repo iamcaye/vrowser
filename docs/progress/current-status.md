@@ -60,6 +60,12 @@ the SQLite migration runner and browsing history. Plugins are not started.
   frame: an input or content-editable region in a child frame (also
   out-of-process) selects Insert, and focus moving to a non-editable element
   in another frame returns to Normal.
+- Link hints: `f` labels the visible links and controls in the focused frame
+  (both runtime styles). Typing a label clicks the element, or focuses it
+  when it is a text field; Escape removes the labels. Keys typed in Hint mode
+  never reach the page. Labels are prefix-free, home-row first, and drawn in
+  a closed shadow root. Details in
+  [input-system.md](../architecture/input-system.md#hints).
 - C++20 library `vrowser_config`: `vrowserrc` in the profile directory is
   read at startup and applied to the Normal-mode bindings (`map`, `unmap`,
   comments). `command <name> <step> | <step>` defines a command that runs
@@ -131,6 +137,7 @@ Clang 21.0.0, Ninja 1.13.2.
 | CEF Linux workflow (`cef-linux.yml` on `ubuntu-latest`) | Built `vrowser` and `chrome-sandbox`; sandbox left ON |
 | CEF Windows workflow (`cef-windows.yml` on `windows-latest`) | Built `vrowser.exe` (bootstrap) and `vrowser.dll`; sandbox left ON |
 | User config, `--vrowser-smoke-test --use-mock-keychain` with a profile `vrowserrc` | invalid file: `vrowser: config: vrowserrc:2: Unknown command: no-such-command`, page still loads, exit 0; valid file: no error, exit 0 |
+| `just key-smoke` with hints (macOS, Chrome style) | `f` on the smoke page reported `hints 3` and put the labels in the page; `s` clicked the button (`clicked:b`) and the page saw no key; `f` then Escape returned to Normal and removed the labels; `keys ok`, exit 0 |
 | `--vrowser-key-smoke-test` with `map j scroll-up` / `map k scroll-down` | stops at "j scrolls one line step" (remapped `j` does not scroll down); the same run without a config passes, `keys ok` |
 | History, two `--vrowser-smoke-test` launches on one profile (`example.com`, then `iana.org/help/example-domains`) | `vrowser.db` at schema 1 holds both rows with titles `Example Domain` and `Example Domains`; the first row survived the restart |
 | `--vrowser-key-smoke-test` with `command top-reload scroll-to-top \| reload` and `map Q top-reload` | config loads without error, `keys ok`; `command bad scroll-to-top \| nope` logs `vrowserrc:1: Unknown command: nope` |
@@ -192,14 +199,15 @@ Vim shell. Details in
 ## Next unblocked work
 
 Normal and Insert modes work in the window (#18), Normal mode scrolls the
-page (#19), and `t`/`gt`/`gT`/`x` open, switch, and close tabs (#32, #58). Insert follows focus across frames (#23). Link hints (#22) build
-on the same dispatcher. Real typing was
+page (#19), and `t`/`gt`/`gT`/`x` open, switch, and close tabs (#32, #58). Insert follows focus across frames (#23). Link hints (#22) use
+the same dispatcher. Real typing was
 checked by hand on macOS in both Chrome and Alloy styles. Permission handling should follow
 Alloy's client-owned prompt path.
 
 ## Recommended next task
 
-[Add link hints](https://github.com/iamcaye/vrowser/issues/22). No
-`priority:p0` issue is open. With the migration runner in place, history
-(#25), bookmarks (#26), profiles (#27), and session restore (#28) are
-unblocked on the storage side.
+No `priority:p0` issue is open. Of the `agent-ready` p1 issues,
+[Restore the previous session](https://github.com/iamcaye/vrowser/issues/28)
+and [Record permission decisions](https://github.com/iamcaye/vrowser/issues/30)
+both add a profile-database migration after bookmarks (#26), so start them
+once that PR is merged.
