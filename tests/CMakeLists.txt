@@ -16,6 +16,7 @@ add_executable(vrowser_unit_tests
   unit/key_bindings_test.cpp
   unit/key_dispatcher_test.cpp
   unit/key_event_test.cpp
+  unit/migration_test.cpp
   unit/mode_machine_test.cpp
   unit/navigation_test.cpp
   unit/scroll_test.cpp
@@ -26,6 +27,8 @@ target_link_libraries(vrowser_unit_tests PRIVATE
   vrowser_commands
   vrowser_vim
   vrowser_ui
+  vrowser_storage
+  vrowser_sqlite
   GTest::gtest_main)
 target_compile_features(vrowser_unit_tests PRIVATE cxx_std_20)
 

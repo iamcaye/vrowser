@@ -1,12 +1,12 @@
 # Current status
 
-Updated: 2026-11-22
+Updated: 2026-11-23
 
 ## Milestone
 
 M0 (project foundation) and the first slice of M1 (one CEF window that loads
-a page) are implemented locally. Vim input, tabs, SQLite, and plugins are not
-started.
+a page) are implemented locally, along with Vim input and tabs. Storage has
+the SQLite migration runner but no tables. Plugins are not started.
 
 ## Implemented
 
@@ -25,8 +25,8 @@ started.
   headers.
 - GoogleTest tests for startup switches, the command registry, mode
   transitions, key normalization, key bindings, counts, navigation
-  requests, command-line URL classification, the tab list, and key
-  dispatch.
+  requests, command-line URL classification, the tab list, key
+  dispatch, and SQLite migrations against temporary database files.
 - A second launch with `--url` loads that URL in the running window.
 - Core `TabList` and tabs in the main window (Alloy style only): each tab is a
   browser view under a fill layout, only the active one is visible, closing a
@@ -59,6 +59,13 @@ started.
   frame: an input or content-editable region in a child frame (also
   out-of-process) selects Insert, and focus moving to a non-editable element
   in another frame returns to Normal.
+- C++20 library `vrowser_storage` with `Database` (an owned SQLite handle)
+  and `ApplyMigrations`, which applies numbered migrations once, records the
+  version in `PRAGMA user_version`, and rolls back a failing migration
+  without advancing it. SQLite 3.54.1 is the official amalgamation, fetched
+  by CMake and pinned by SHA3-256, built with extension loading off. The
+  database file itself may not be a symlink. Not wired into the browser
+  yet; no tables.
 - clang-format (C++ and Objective-C), clang-tidy config, editorconfig.
 - GitHub Actions workflow that runs the unit tests on Linux, macOS, and
   Windows. Run [44557827020](https://github.com/iamcaye/vrowser/actions/runs/44557827020)
@@ -86,7 +93,7 @@ Clang 21.0.0, Ninja 1.13.2.
 
 | Check | Result |
 | --- | --- |
-| `cmake --preset ci && cmake --build --preset ci && ctest --preset ci` | 127 tests passed |
+| `cmake --preset ci && cmake --build --preset ci && ctest --preset ci` | 194 tests passed (includes 9 migration tests) |
 | `ctest --test-dir build/debug` | 9 tests passed (older local debug tree) |
 | `cmake --preset debug && cmake --build --preset debug` | Built `Vrowser.app` and five helper bundles |
 | CEF macOS arm64 archive SHA256 | `22a510e5d348a907953278b618e1e9e442ccf78773b9fee0e09eaf154eef53b0` |
@@ -177,4 +184,6 @@ Alloy's client-owned prompt path.
 ## Recommended next task
 
 [Add link hints](https://github.com/iamcaye/vrowser/issues/22). No
-`priority:p0` issue is open.
+`priority:p0` issue is open. With the migration runner in place, history
+(#25), bookmarks (#26), profiles (#27), and session restore (#28) are
+unblocked on the storage side.

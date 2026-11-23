@@ -22,7 +22,8 @@ untrusted. The Chromium sandbox stays on.
   says so.
 - CMake 3.24+ and `CMakePresets.json`.
 - CEF Views for the window. Native windows are available with `--use-native`.
-- SQLite is the planned store. It is not linked yet.
+- SQLite is the store. `src/storage` builds the pinned official amalgamation
+  (`vrowser_sqlite`) and runs schema migrations. No tables exist yet.
 - GoogleTest and CTest.
 - clang-format (Chromium style) and clang-tidy.
 - GitHub Actions for portable unit tests.
@@ -184,7 +185,7 @@ Do not tidy `third_party/` or the CEF wrapper.
 ## Current development phase
 
 M0 (foundation) and the first M1 slice (one window, one URL, clean shutdown)
-are the active work. Vim modes, SQLite, tabs, and plugins are not started.
+are the active work. Plugins are not started, and storage has only the migration runner.
 Read `docs/progress/current-status.md` for what was actually built and tested.
 
 ## Issue workflow
