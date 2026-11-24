@@ -13,6 +13,7 @@ add_executable(vrowser_unit_tests
   unit/command_registry_test.cpp
   unit/default_bindings_test.cpp
   unit/frame_focus_test.cpp
+  unit/bookmarks_test.cpp
   unit/history_test.cpp
   unit/key_bindings_test.cpp
   unit/key_dispatcher_test.cpp

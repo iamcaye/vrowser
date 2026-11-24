@@ -5,63 +5,16 @@
 
 #include <sqlite3.h>
 
-#include <array>
 #include <cctype>
 #include <utility>
+
+#include "statement.hpp"
+#include "vrowser/storage/profile_database.hpp"
 
 namespace vrowser {
 namespace {
 
-constexpr std::array<Migration, 1> kProfileMigrations = {
-    Migration{
-        .version = 1,
-        .sql = "CREATE TABLE history("
-               "  id INTEGER PRIMARY KEY,"
-               "  url TEXT NOT NULL,"
-               "  title TEXT NOT NULL DEFAULT '',"
-               "  visited_at_ms INTEGER NOT NULL);"
-               "CREATE INDEX history_visited_at ON history(visited_at_ms)",
-    },
-};
-
-// A prepared statement that finalizes itself.
-class Statement {
- public:
-  Statement(sqlite3* db, const char* sql) {
-    if (sqlite3_prepare_v2(db, sql, -1, &statement_, nullptr) != SQLITE_OK) {
-      statement_ = nullptr;
-    }
-  }
-  Statement(const Statement&) = delete;
-  Statement& operator=(const Statement&) = delete;
-  Statement(Statement&&) = delete;
-  Statement& operator=(Statement&&) = delete;
-  ~Statement() { sqlite3_finalize(statement_); }
-
-  [[nodiscard]] bool ok() const { return statement_ != nullptr; }
-  [[nodiscard]] sqlite3_stmt* get() const { return statement_; }
-
-  bool BindText(int index, std::string_view text) {
-    return sqlite3_bind_text(statement_, index, text.data(),
-                             static_cast<int>(text.size()),
-                             SQLITE_TRANSIENT) == SQLITE_OK;
-  }
-  bool BindInt64(int index, std::int64_t value) {
-    return sqlite3_bind_int64(statement_, index, value) == SQLITE_OK;
-  }
-
- private:
-  sqlite3_stmt* statement_ = nullptr;
-};
-
-std::string ColumnText(sqlite3_stmt* statement, int column) {
-  const unsigned char* text = sqlite3_column_text(statement, column);
-  if (text == nullptr) {
-    return {};
-  }
-  return {reinterpret_cast<const char*>(text),
-          static_cast<size_t>(sqlite3_column_bytes(statement, column))};
-}
+using storage_internal::Statement;
 
 bool StartsWithIgnoringCase(std::string_view text, std::string_view prefix) {
   if (text.size() < prefix.size()) {
@@ -80,21 +33,7 @@ bool StartsWithIgnoringCase(std::string_view text, std::string_view prefix) {
 HistoryStore HistoryStore::Open(const std::filesystem::path& path,
                                 std::string* error) {
   HistoryStore store;
-  std::string open_error;
-  store.db_ = Database::Open(path, &open_error);
-  if (!store.db_.is_open()) {
-    if (error != nullptr) {
-      *error = std::move(open_error);
-    }
-    return store;
-  }
-  MigrationResult migrated = ApplyMigrations(store.db_, kProfileMigrations);
-  if (!migrated.ok) {
-    if (error != nullptr) {
-      *error = std::move(migrated.error);
-    }
-    store.db_ = Database();
-  }
+  store.db_ = OpenProfileDatabase(path, error);
   return store;
 }
 
@@ -141,8 +80,8 @@ std::vector<HistoryEntry> HistoryStore::Newest(int limit) const {
   while (sqlite3_step(select.get()) == SQLITE_ROW) {
     entries.push_back({
         .id = sqlite3_column_int64(select.get(), 0),
-        .url = ColumnText(select.get(), 1),
-        .title = ColumnText(select.get(), 2),
+        .url = select.ColumnText(1),
+        .title = select.ColumnText(2),
         .visited_at_ms = sqlite3_column_int64(select.get(), 3),
     });
   }

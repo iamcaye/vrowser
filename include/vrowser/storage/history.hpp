@@ -12,11 +12,9 @@
 #include <vector>
 
 #include "vrowser/storage/migrations.hpp"
+#include "vrowser/storage/profile_database.hpp"
 
 namespace vrowser {
-
-// The profile database file, in the profile directory.
-inline constexpr std::string_view kProfileDatabaseFileName = "vrowser.db";
 
 // One visit: a committed main-frame navigation.
 struct HistoryEntry {
